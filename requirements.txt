@@ -1,0 +1,20 @@
+# Core networking dependencies
+requests>=2.25.1
+websocket-client>=1.2.3
+
+# Performance-optimized JSON parsing
+orjson>=3.8.0  # Used in your code instead of ujson
+
+# GUI dependencies
+# Note: tkinter comes with Python installation
+# but on Linux may need to be installed separately with:
+# sudo apt-get install python3-tk (Debian/Ubuntu)
+# sudo yum install python3-tkinter (RHEL/CentOS)
+
+# Development and build tools (optional)
+# Only needed if compiling with Nuitka
+nuitka>=1.0.0  # For compiling to binary
+ordered-set>=4.1.0  # Required by Nuitka
+
+# Optional enhancements
+python-dateutil>=2.8.2  # For better date handling if needed
