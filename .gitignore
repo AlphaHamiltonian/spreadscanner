@@ -9,3 +9,4 @@ build/
 
 # Compiled python modules
 *.pyc
+__pycache__/
