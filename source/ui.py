@@ -176,7 +176,18 @@ class ExchangeMonitorApp:
         ToolTip(mirror_sort_chk, "When enabled, sorting one table will automatically\n"
                             "sort the other table in the opposite direction,\n"
                             "showing both ends of the data range at once.")
-
+    # Add this after the existing controls
+        ttk.Label(control_frame, text="Max Rows:").grid(row=0, column=12, padx=5, pady=5, sticky=tk.W)
+        self.max_rows_var = tk.StringVar(value="50")
+        max_rows_combo = ttk.Combobox(
+            control_frame,
+            textvariable=self.max_rows_var,
+            values=["50", "500", "All"],
+            width=5,
+            state="readonly"
+        )
+        max_rows_combo.grid(row=0, column=13, padx=5, pady=5, sticky=tk.W)
+        max_rows_combo.bind("<<ComboboxSelected>>", lambda e: self.update_data_table(force_upper=True, force_lower=True))
 
     def create_table_controls(self, parent_frame, table_id):
         """Create sorting controls for a specific table"""
@@ -703,60 +714,64 @@ class ExchangeMonitorApp:
         
         # Use the faster sorting approach
         table_data.sort(key=get_sort_key)
-        
+        max_rows = self.max_rows_var.get()
+        if max_rows != "All":
+            try:
+                limit = int(max_rows)
+                if len(table_data) > limit:
+                    table_data = table_data[:limit]
+            except ValueError:
+                pass  # Invalid number, don't limit
         return table_data
 
+
+    # In ExchangeMonitorApp.update_data_table
     def update_data_table(self, force_upper=False, force_lower=False):
-        """Update both data tables with rate limiting to prevent hangs"""
-        # If both tables have mouse over and no force, don't update
-        if (self.upper_mouse_over_table and not force_upper) and (self.lower_mouse_over_table and not force_lower):
+        # Implement debouncing to prevent too frequent updates
+        current_time = time.time()
+        # Increase the minimum update interval from 1.0s to 1.5s for smoother UI
+        if not (force_upper or force_lower) and hasattr(self, 'last_update_time') and current_time - self.last_update_time < 1.5:
             return
             
-        # Rate limit updates - don't update too frequently unless forced
-        current_time = time.time()
-        if not (force_upper or force_lower) and hasattr(self, 'last_update_time') and current_time - self.last_update_time < 1.0:
-            return  # Wait at least 1 second between updates
-            
-        self.last_update_time = current_time
-        
-        # Process this in a separate thread
-        def prepare_data():
+        # Use a dedicated background worker for all data preparation
+        def background_worker():
             try:
-                # Get all symbols from all exchanges
                 all_symbols = {}
                 for exchange in ['binance', 'bybit', 'okx']:
                     symbols = data_store.get_symbols(exchange)
                     all_symbols[exchange] = set(symbols)
                     
-                # Update upper table if not mouse over or forced
+                # Process both tables in a single pass to share computation
+                upper_data = None
+                lower_data = None
+                
                 if not self.upper_mouse_over_table or force_upper:
-                    # Capture upper sort settings
-                    upper_sort_column = self.upper_sort_column_var.get()
-                    upper_sort_direction = self.upper_sort_direction_var.get()
+                    upper_data = self._prepare_table_data(
+                        all_symbols,
+                        self.upper_sort_column_var.get(),
+                        self.upper_sort_direction_var.get()
+                    )
                     
-                    # Prepare upper table data
-                    upper_table_data = self._prepare_table_data(all_symbols, upper_sort_column, upper_sort_direction)
-                    
-                    # Update UI in main thread
-                    self.root.after(0, lambda: self._update_ui_with_data(self.upper_table, upper_table_data, "upper"))
-                
-                # Update lower table if not mouse over or forced
                 if not self.lower_mouse_over_table or force_lower:
-                    # Capture lower sort settings
-                    lower_sort_column = self.lower_sort_column_var.get()
-                    lower_sort_direction = self.lower_sort_direction_var.get()
+                    lower_data = self._prepare_table_data(
+                        all_symbols,
+                        self.lower_sort_column_var.get(),
+                        self.lower_sort_direction_var.get()
+                    )
                     
-                    # Prepare lower table data
-                    lower_table_data = self._prepare_table_data(all_symbols, lower_sort_column, lower_sort_direction)
-                    
-                    # Update UI in main thread
-                    self.root.after(0, lambda: self._update_ui_with_data(self.lower_table, lower_table_data, "lower"))
-                    
+                # Update UI in a single operation at end
+                def update_ui():
+                    if upper_data:
+                        self._update_ui_with_data(self.upper_table, upper_data, "upper")
+                    if lower_data:
+                        self._update_ui_with_data(self.lower_table, lower_data, "lower")
+                        
+                self.root.after(0, update_ui)
             except Exception as e:
-                logger.error(f"Error preparing table data: {e}")
+                logger.error(f"Error in table update worker: {e}")
                 
-        # Use a background thread for data preparation
-        self.executor.submit(prepare_data)
+        # Submit to thread pool instead of creating a new thread each time
+        self.executor.submit(background_worker)
 
     def _update_ui_with_data(self, table, table_data, table_id):
         """Update the specified UI table with the prepared data"""
@@ -773,28 +788,15 @@ class ExchangeMonitorApp:
             logger.error(f"Error updating {table_id} table with data: {e}")
 
     def _optimize_table_update(self, table, new_data):
-        """More efficient table update that avoids full rebuilds when possible"""
+        """Significantly optimized table update that reuses existing rows as much as possible"""
         try:
-            # Get current items
-            current_items = list(table.get_children())
+            # Get current items as a dictionary for O(1) lookup
+            current_items = {item_id: idx for idx, item_id in enumerate(table.get_children())}
+            total_items = len(current_items)
             
-            # If the number of items hasn't changed, we can optimize by just reordering
-            if len(current_items) == len(new_data) and len(current_items) > 0:
-                # Map new order of items
-                new_order = {}
+            # If table is completely empty, do full insertion
+            if total_items == 0:
                 for i, item_data in enumerate(new_data):
-                    item_id = f"{item_data['exchange']}_{item_data['symbol']}"
-                    new_order[item_id] = i
-                
-                # Sort current_items according to new_order
-                current_items.sort(key=lambda item_id: new_order.get(item_id, 999999))
-                
-                # Reinsert items in new order
-                for item_id in current_items:
-                    table.move(item_id, '', 'end')
-                    
-                # Update values that might have changed
-                for item_data in new_data:
                     item_id = f"{item_data['exchange']}_{item_data['symbol']}"
                     values = (
                         item_data['symbol'],
@@ -810,15 +812,103 @@ class ExchangeMonitorApp:
                         item_data['spot_tick_size'],
                         item_data['change_24h']
                     )
-                    table.item(item_id, values=values)
-                
-                return  # We're done, no need for full rebuild
-                
-            # Fall back to full rebuild if optimization not possible
-            for item_id in current_items:
-                table.delete(item_id)
+                    # Insert at the end to maintain sorted order
+                    table.insert('', 'end', iid=item_id, values=values,
+                            tags=('even' if i % 2 == 0 else 'odd',))
+                return
             
-            # Insert all items in the correct (sorted) order
+            # Create new ID list for final ordering
+            new_order = []
+            items_to_update = {}
+            items_to_add = []
+            
+            # First pass: identify what needs to be updated, added, or kept the same
+            for i, item_data in enumerate(new_data):
+                item_id = f"{item_data['exchange']}_{item_data['symbol']}"
+                new_order.append(item_id)
+                
+                # Store values for item
+                values = (
+                    item_data['symbol'],
+                    item_data['exchange'],
+                    item_data['bid'],
+                    item_data['ask'],
+                    item_data['funding_rate'],
+                    item_data['spread_vs_spot'],
+                    item_data['spread_vs_binance'],
+                    item_data['spread_vs_okx'],
+                    item_data['spread_vs_bybit'],
+                    item_data['future_tick_size'],
+                    item_data['spot_tick_size'],
+                    item_data['change_24h']
+                )
+                
+                if item_id in current_items:
+                    # This item needs to be updated
+                    items_to_update[item_id] = values
+                else:
+                    # This item needs to be added
+                    items_to_add.append((item_id, values, i))
+            
+            # Get items that need to be removed (in current but not in new)
+            items_to_remove = set(current_items.keys()) - set(new_order)
+            
+            # If major changes (>50% items different), do a full rebuild for efficiency
+            change_ratio = (len(items_to_add) + len(items_to_remove)) / max(len(new_data), 1)
+            if change_ratio > 0.5:
+                # Full rebuild is more efficient
+                for item_id in current_items:
+                    table.delete(item_id)
+                    
+                for i, item_data in enumerate(new_data):
+                    item_id = f"{item_data['exchange']}_{item_data['symbol']}"
+                    values = (
+                        item_data['symbol'],
+                        item_data['exchange'],
+                        item_data['bid'],
+                        item_data['ask'],
+                        item_data['funding_rate'],
+                        item_data['spread_vs_spot'],
+                        item_data['spread_vs_binance'],
+                        item_data['spread_vs_okx'],
+                        item_data['spread_vs_bybit'],
+                        item_data['future_tick_size'],
+                        item_data['spot_tick_size'],
+                        item_data['change_24h']
+                    )
+                    table.insert('', 'end', iid=item_id, values=values,
+                            tags=('even' if i % 2 == 0 else 'odd',))
+                return
+            
+            # Apply incremental changes
+            
+            # 1. Remove items that shouldn't be there
+            for item_id in items_to_remove:
+                table.delete(item_id)
+                
+            # 2. Add new items
+            for item_id, values, i in items_to_add:
+                table.insert('', 'end', iid=item_id, values=values,
+                        tags=('even' if i % 2 == 0 else 'odd',))
+                
+            # 3. Update existing items
+            for item_id, values in items_to_update.items():
+                table.item(item_id, values=values)
+                
+            # 4. Reorder all items to match new_order
+            # Only reorder if the new order is different
+            existing_items = list(table.get_children())
+            if existing_items != new_order:
+                # For each item, move it to the end in the correct order
+                for item_id in new_order:
+                    table.move(item_id, '', 'end')
+                    
+        except Exception as e:
+            logger.error(f"Error optimizing table update: {e}")
+            # Fallback to simple update if optimization fails
+            for item_id in table.get_children():
+                table.delete(item_id)
+                
             for i, item_data in enumerate(new_data):
                 item_id = f"{item_data['exchange']}_{item_data['symbol']}"
                 values = (
@@ -835,12 +925,8 @@ class ExchangeMonitorApp:
                     item_data['spot_tick_size'],
                     item_data['change_24h']
                 )
-                # Insert at the end to maintain sorted order
                 table.insert('', 'end', iid=item_id, values=values,
-                            tags=('even' if i % 2 == 0 else 'odd',))
-        except Exception as e:
-            logger.error(f"Error updating table: {e}")
-
+                        tags=('even' if i % 2 == 0 else 'odd',))
 
     def extract_number(self, value):
         """Extract numeric value from formatted string for sorting"""

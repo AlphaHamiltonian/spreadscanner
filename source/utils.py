@@ -104,8 +104,9 @@ class WebSocketManager:
         elif self.reconnect_count >= self.retry_count:
             logger.error(f"{self.name} WebSocket failed after {self.retry_count} attempts")
 
+
     def connect(self):
-        """Connect to WebSocket with auto-reconnect and dynamic processors"""
+        """Connect to WebSocket with improved error handling and backoff strategy"""
         # Don't reconnect if already connected
         if self.is_running and self.ws and hasattr(self.ws, 'sock') and self.ws.sock and self.ws.sock.connected:
             logger.debug(f"{self.name} already connected, skipping reconnect")
@@ -113,6 +114,18 @@ class WebSocketManager:
             
         # Reset state for a clean connection
         self.is_running = True
+        
+        # Implement exponential backoff for reconnection attempts
+        if not hasattr(self, 'backoff_time'):
+            self.backoff_time = 1.0  # Start with 1 second
+        else:
+            # Increase backoff time with each reconnect, up to 30 seconds
+            self.backoff_time = min(30, self.backoff_time * 1.5)
+        
+        # If we've seen multiple failures, add a random jitter to prevent connection storms
+        if self.reconnect_count > 2:
+            jitter = random.uniform(0, 2)
+            time.sleep(jitter)
                 
         try:
             # Close any existing connection first
@@ -136,11 +149,20 @@ class WebSocketManager:
             
             # Start WebSocket thread only if not already running
             if not self.thread or not self.thread.is_alive():
+                # Use different ping/pong settings for different exchanges
+                ping_interval = 20
+                ping_timeout = 10
+                
+                # Bybit needs more aggressive ping/pong
+                if "bybit" in self.name.lower():
+                    ping_interval = 15
+                    ping_timeout = 10
+                    
                 self.thread = threading.Thread(
                     target=self.ws.run_forever,
                     kwargs={
-                        'ping_interval': self.ping_interval,
-                        'ping_timeout': self.ping_timeout,
+                        'ping_interval': ping_interval,
+                        'ping_timeout': ping_timeout,
                         'sslopt': {"cert_reqs": 0}
                     },
                     daemon=True,
@@ -149,6 +171,9 @@ class WebSocketManager:
                 self.thread.start()
                 logger.info(f"Started {self.name} WebSocket thread")
                 
+            # Reset backoff on successful connection
+            self.backoff_time = 1.0
+            
             # Set last activity time for health monitoring
             self.last_activity = time.time()
             logger.info(f"Connected {self.name} WebSocket")
@@ -156,6 +181,9 @@ class WebSocketManager:
         except Exception as e:
             self.is_running = False
             logger.error(f"Failed to connect {self.name}: {e}")
+            
+            # Schedule reconnection with backoff
+            threading.Timer(self.backoff_time, self.connect).start()
 
     def check_health(self):
         """Comprehensive health check with intelligent recovery"""
@@ -178,9 +206,10 @@ class WebSocketManager:
         pong_timeout = 120  # 2 minutes
         if hasattr(self, 'last_pong_time') and current_time - self.last_pong_time > pong_timeout:
             health_issues.append(f"No pong response for {current_time - self.last_pong_time:.1f}s")
-            
-        # Take action if there are health issues
-        if health_issues:
+
+        # Take action if there are health issues, but limit reconnection frequency
+        if health_issues and (not hasattr(self, 'last_reconnect_time') or 
+                                current_time - getattr(self, 'last_reconnect_time', 0) > 15):  # 15 sec minimum between reconnects
             logger.warning(f"{self.name} health check failed: {', '.join(health_issues)}")
             # Force reconnection for serious issues
             if "WebSocket thread died" in health_issues or "No activity" in health_issues or "No pong response" in health_issues:
@@ -188,6 +217,7 @@ class WebSocketManager:
                 self.disconnect()
                 time.sleep(1)
                 self.connect()
+                self.last_reconnect_time = current_time
                 return False
                 
         return len(health_issues) == 0
