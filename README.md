@@ -1,9 +1,3 @@
-Great. I’ll update your README in the same format, improving clarity and completeness based on the codebase. I’ll also provide specific suggestions to improve your real-time crypto monitoring app for both traders and developers.
-I’ll let you know when the updated README and recommendations are ready.
-
-
-**Part 1: Revised README.md**
-
 # Crypto Exchange Monitor
 
 A modular, extensible Python application that streams real‑time market data from multiple cryptocurrency exchanges (Binance, Bybit, OKX) and presents it in a Tkinter desktop GUI. It is designed for **low‑latency monitoring** with a multi-threaded architecture, rapid expansion (adding new exchanges or analytics), and clean separation of concerns. The interface features a dual-table display for side-by-side views of market data and spreads, with robust connectivity and data normalization (funding rates, tick sizes, etc.) to ensure consistent, accurate real-time monitoring.
@@ -77,7 +71,7 @@ After launch, a window will open showing live order book data and metrics in two
 
 ## 🔧 Configuration
 
-Most runtime parameters can be tuned in **`source/config.py`** or within connectors as appropriate. Key settings and behaviors include:
+Most runtime parameters can be tuned in **`source/config.py`** and within connectors as appropriate. Key settings and behaviors include:
 
 * **WebSocket & API Endpoints:** Each exchange’s connector defines the WebSocket URLs and any REST endpoints for funding rates or tickers. For example, Binance uses `wss://fstream.binance.com/stream` for futures data. These can be adjusted if endpoints change or for testing (e.g., pointing to testnet URLs).
 * **Heartbeat/Ping Intervals:** The `WebSocketManager` defaults (30s ping interval, 10s pong timeout) ensure connections stay alive. The health monitor will send pings (for exchanges that require it) and reconnect if pongs aren’t received within a threshold.
@@ -112,24 +106,6 @@ The application uses Python’s built-in logging framework. Logging is configure
 
 You can tailor the logging levels or add handlers (e.g., rotating file handler, external logging service) by editing the config. This helps in production environments to balance verbosity vs. information needed for monitoring the app’s health.
 
----
-
-## 🤝 Contributing
-
-Contributions are welcome! To get started:
-
-1. Fork the repo and create a feature branch: `git checkout -b feature/my-new-feature`.
-2. Ensure code style and quality by running `flake8` or other linters. (Optional: set up pre-commit hooks for automatic formatting on commit.)
-3. Add tests in a `tests/` directory if adding new functionality, especially for any critical data processing logic.
-4. Open a Pull Request with a clear description of the changes and the motivation (link to any relevant issues). Please include details on how to reproduce or test new features.
-
-All contributions should adhere to the project’s coding style and aim to maintain or improve the clarity and performance of the code. Discussion through issues or the PR is encouraged to refine the feature or fix.
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE). You are free to use, modify, and distribute this software. Contributions you make will also fall under the MIT license.
 
 ---
 
