@@ -1149,6 +1149,18 @@ class BybitConnector(BaseExchangeConnector):
             
             # 6. Start health monitoring
             threading.Timer(30, self.monitor_symbol_health).start()
+
+            threading.Thread(
+                target=self.update_funding_rates,
+                daemon=True,
+                name="bybit_funding_updater"
+            ).start()
+
+            threading.Thread(
+                target=self.update_24h_changes,
+                daemon=True,
+                name="bybit_changes_updater"
+            ).start()
             
             logger.info("Bybit connector initialization complete")
         except Exception as e:
