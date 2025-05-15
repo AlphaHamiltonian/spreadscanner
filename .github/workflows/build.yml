@@ -59,12 +59,12 @@ jobs:
 
       - name: Compile with Nuitka (Windows)
         if: matrix.platform == 'Windows'
-        run: python -m nuitka --onefile --enable-plugin=tk-inter --disable-ccache --jobs=1 --assume-yes-for-downloads allmonitor.py
+        run: python -m nuitka --onefile --enable-plugin=tk-inter --disable-ccache --jobs=1 --assume-yes-for-downloads run.py
         shell: pwsh
         
       - name: Compile with Nuitka (Linux / macOS)
         if: matrix.platform != 'Windows'
-        run: python -m nuitka --onefile --enable-plugin=tk-inter --jobs=2 allmonitor.py
+        run: python -m nuitka --onefile --enable-plugin=tk-inter --jobs=2 run.py
         shell: bash
         
       - name: Rename output (Windows)
