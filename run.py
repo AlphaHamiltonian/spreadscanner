@@ -16,13 +16,13 @@ websocket.enableTrace(False)
 
 # Configure logging
 logging.basicConfig(
-    level=logging.CRITICAL,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[logging.FileHandler("exchange_monitor.log"), logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 websocket_debug_logger = logging.getLogger('websocket')
-websocket_debug_logger.setLevel(logging.CRITICAL)
+websocket_debug_logger.setLevel(logging.INFO)
 logger.info(f"Using websocket-client version: {websocket.__version__}")
 
 

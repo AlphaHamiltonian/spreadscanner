@@ -17,9 +17,40 @@ from source.exchanges.okx import OkxConnector
 logger = logging.getLogger(__name__) # module-specific logger
 
 
+class ToolTip:
+    """Simple tooltip implementation for Tkinter widgets"""
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tooltip_window = None
+        self.widget.bind("<Enter>", self.show_tooltip)
+        self.widget.bind("<Leave>", self.hide_tooltip)
+        
+    def show_tooltip(self, event=None):
+        """Display the tooltip"""
+        x, y, _, _ = self.widget.bbox("insert")
+        x += self.widget.winfo_rootx() + 25
+        y += self.widget.winfo_rooty() + 25
+        
+        # Create a toplevel window
+        self.tooltip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)  # Remove window decorations
+        tw.wm_geometry(f"+{x}+{y}")
+        
+        # Create label with tooltip text
+        label = tk.Label(tw, text=self.text, background="#ffffe0", relief="solid", borderwidth=1, padx=5, pady=2)
+        label.pack()
+        
+    def hide_tooltip(self, event=None):
+        """Hide the tooltip"""
+        if self.tooltip_window:
+            self.tooltip_window.destroy()
+            self.tooltip_window = None
+
 class ExchangeMonitorApp:
     """Main application UI class."""
     def __init__(self, root):
+
         self.root = root
         self.root.title("Crypto Exchange Monitor")
         self.root.geometry("1400x800")
@@ -88,6 +119,9 @@ class ExchangeMonitorApp:
         # Schedule periodic UI updates
         self.schedule_updates()
 
+        # Initialize mirror sort setting
+        self.mirror_sort_var = tk.BooleanVar(value=True)
+
     def create_control_panel(self):
         """Create the control panel with configuration options"""
         control_frame = ttk.LabelFrame(self.main_frame, text="Controls", padding="10")
@@ -129,55 +163,100 @@ class ExchangeMonitorApp:
         filter_entry.grid(row=0, column=11, padx=5, pady=5, sticky=tk.W)
         self.filter_var.trace("w", lambda *args: self.apply_filter())
 
+        # Mirror sort checkbox
+        self.mirror_sort_var = tk.BooleanVar(value=True)
+        mirror_sort_chk = ttk.Checkbutton(
+            control_frame,
+            text="Mirror Sort Tables",
+            variable=self.mirror_sort_var
+        )
+        mirror_sort_chk.grid(row=0, column=4, padx=15, pady=5, sticky=tk.W)
+
+        # Add tooltip to mirror sort checkbox
+        ToolTip(mirror_sort_chk, "When enabled, sorting one table will automatically\n"
+                            "sort the other table in the opposite direction,\n"
+                            "showing both ends of the data range at once.")
+
+
     def create_table_controls(self, parent_frame, table_id):
         """Create sorting controls for a specific table"""
         control_frame = ttk.Frame(parent_frame)
         control_frame.pack(fill=tk.X, pady=(0, 5))
         
-        # Sort options
-        ttk.Label(control_frame, text="Sort by:").pack(side=tk.LEFT, padx=5)
-        
         # Create sort variables for this table
         if table_id == "upper":
             self.upper_sort_column_var = tk.StringVar(value="Symbol")
             self.upper_sort_direction_var = tk.StringVar(value="ascending")
-            sort_column_var = self.upper_sort_column_var
-            sort_direction_var = self.upper_sort_direction_var
-            callback = lambda *args: self.apply_sorting("upper")
         else:
             self.lower_sort_column_var = tk.StringVar(value="Symbol")
             self.lower_sort_direction_var = tk.StringVar(value="ascending")
-            sort_column_var = self.lower_sort_column_var
-            sort_direction_var = self.lower_sort_direction_var
-            callback = lambda *args: self.apply_sorting("lower")
+        
+        # Note: We've removed the radio buttons for sort direction
+        # Sort direction will be toggled by clicking on column headers
+
+    def apply_mirrored_sorting(self, direction="upper_to_lower"):
+        """Apply opposite sorting to the other table
+        
+        Args:
+            direction: Either "upper_to_lower" (default) or "lower_to_upper"
+        """
+        # Check if mirrored sorting is enabled
+        if not getattr(self, 'mirror_sort_var', tk.BooleanVar(value=False)).get():
+            return
             
-        sort_combo = ttk.Combobox(
-            control_frame,
-            textvariable=sort_column_var,
-            values=["Symbol", "Exchange", "Funding Rate", "Spread vs Spot",
-                    "Spread vs Binance", "Spread vs OKX", "Spread vs Bybit", "24h Change"],
-            width=15,
-            state="readonly"
-        )
-        sort_combo.pack(side=tk.LEFT, padx=5)
-        sort_combo.bind("<<ComboboxSelected>>", callback)
+        # Field to column mapping for reference
+        field_to_column = {
+            'Symbol': 'symbol',
+            'Exchange': 'exchange',
+            'Funding Rate': 'funding_rate',
+            'Spread vs Spot': 'spread_vs_spot',
+            'Spread vs Binance': 'spread_vs_binance',
+            'Spread vs OKX': 'spread_vs_okx',
+            'Spread vs Bybit': 'spread_vs_bybit',
+            '24h Change': 'change_24h'
+        }
         
-        # Sort direction
-        ttk.Radiobutton(
-            control_frame,
-            text="Ascending",
-            variable=sort_direction_var,
-            value="ascending",
-            command=callback
-        ).pack(side=tk.LEFT, padx=5)
-        
-        ttk.Radiobutton(
-            control_frame,
-            text="Descending",
-            variable=sort_direction_var,
-            value="descending",
-            command=callback
-        ).pack(side=tk.LEFT, padx=5)
+        if direction == "upper_to_lower":
+            # Get the current upper table sort settings
+            upper_column = self.upper_sort_column_var.get()
+            upper_direction = self.upper_sort_direction_var.get()
+            
+            # Set the lower table to sort on the same column but opposite direction
+            self.lower_sort_column_var.set(upper_column)
+            
+            # Apply opposite direction
+            if upper_direction == 'ascending':
+                self.lower_sort_direction_var.set('descending')
+            else:
+                self.lower_sort_direction_var.set('ascending')
+            
+            # Update the lower_sorted_column variable for consistency
+            self.lower_sorted_column = field_to_column.get(upper_column, 'symbol')
+            
+            # Apply the sort
+            logger.info(f"Mirror-sorting lower table by {upper_column} ({self.lower_sort_direction_var.get()})")
+            self.update_data_table(force_lower=True)
+            
+        else:  # lower_to_upper
+            # Get the current lower table sort settings
+            lower_column = self.lower_sort_column_var.get()
+            lower_direction = self.lower_sort_direction_var.get()
+            
+            # Set the upper table to sort on the same column but opposite direction
+            self.upper_sort_column_var.set(lower_column)
+            
+            # Apply opposite direction
+            if lower_direction == 'ascending':
+                self.upper_sort_direction_var.set('descending')
+            else:
+                self.upper_sort_direction_var.set('ascending')
+            
+            # Update the upper_sorted_column variable for consistency
+            self.upper_sorted_column = field_to_column.get(lower_column, 'symbol')
+            
+            # Apply the sort
+            logger.info(f"Mirror-sorting upper table by {lower_column} ({self.upper_sort_direction_var.get()})")
+            self.update_data_table(force_upper=True)
 
     def export_to_csv(self):
         """Export the current data table to a CSV file"""
@@ -350,7 +429,7 @@ class ExchangeMonitorApp:
         self.restart_exchange_threads()
 
     def on_heading_click(self, column, table_id):
-        """Handle column header click for sorting"""
+        """Handle column header click for sorting with dual-table mirroring"""
         # Map treeview column names to sort field names
         column_to_field = {
             'symbol': 'Symbol',
@@ -382,6 +461,10 @@ class ExchangeMonitorApp:
                 
                 # Force a sort and update now
                 self.apply_sorting("upper")
+                
+                # Apply opposite sorting to the lower table
+                self.apply_mirrored_sorting()
+                
             else:  # Lower table
                 logger.info(f"Lower table header clicked: {column} -> {column_to_field[column]}")
                 
@@ -400,15 +483,60 @@ class ExchangeMonitorApp:
                 
                 # Force a sort and update now
                 self.apply_sorting("lower")
+                
+                # Apply opposite sorting to the upper table
+                self.apply_mirrored_sorting("lower_to_upper")
 
     def apply_sorting(self, table_id="upper"):
-        """Apply sorting to the specified data table and trigger an update"""
+        """Apply sorting to the specified data table with faster response"""
         if table_id == "upper":
             logger.info(f"Applying upper sort: {self.upper_sort_column_var.get()} ({self.upper_sort_direction_var.get()})")
-            self.update_data_table(force_upper=True)
+            
+            # For sorting, do it directly in the main thread for faster response
+            try:
+                # Get all symbols from all exchanges
+                all_symbols = {}
+                for exchange in ['binance', 'bybit', 'okx']:
+                    symbols = data_store.get_symbols(exchange)
+                    all_symbols[exchange] = set(symbols)
+                
+                # Prepare upper table data
+                upper_table_data = self._prepare_table_data(
+                    all_symbols, 
+                    self.upper_sort_column_var.get(),
+                    self.upper_sort_direction_var.get()
+                )
+                
+                # Update UI directly
+                self._update_ui_with_data(self.upper_table, upper_table_data, "upper")
+            except Exception as e:
+                logger.error(f"Error in direct sorting: {e}")
+                # Fall back to background processing if error occurs
+                self.update_data_table(force_upper=True)
         else:
             logger.info(f"Applying lower sort: {self.lower_sort_column_var.get()} ({self.lower_sort_direction_var.get()})")
-            self.update_data_table(force_lower=True)
+            
+            # Similar direct processing for lower table
+            try:
+                # Get all symbols from all exchanges
+                all_symbols = {}
+                for exchange in ['binance', 'bybit', 'okx']:
+                    symbols = data_store.get_symbols(exchange)
+                    all_symbols[exchange] = set(symbols)
+                
+                # Prepare lower table data
+                lower_table_data = self._prepare_table_data(
+                    all_symbols, 
+                    self.lower_sort_column_var.get(),
+                    self.lower_sort_direction_var.get()
+                )
+                
+                # Update UI directly
+                self._update_ui_with_data(self.lower_table, lower_table_data, "lower")
+            except Exception as e:
+                logger.error(f"Error in direct sorting: {e}")
+                # Fall back to background processing if error occurs
+                self.update_data_table(force_lower=True)
 
     def apply_filter(self):
         """Apply symbol filter to both data tables"""
@@ -566,17 +694,15 @@ class ExchangeMonitorApp:
         reverse = (sort_direction == 'descending')
         
         # Sort with N/A values always at the bottom, regardless of sort direction
-        table_data.sort(
-            key=lambda x: (
-                # First sorting key: 0 for normal values, 1 for N/A values
-                # This ensures N/A always sorts after normal values
-                1 if x[sort_key] == 'N/A' or (isinstance(x[sort_key], float) and math.isnan(x[sort_key])) else 0,
-                # Second sorting key: the actual value for normal sorting
-                # For N/A values, use a placeholder that won't affect the sort
-                0 if x[sort_key] == 'N/A' or (isinstance(x[sort_key], float) and math.isnan(x[sort_key])) else
-                (-x[sort_key] if reverse else x[sort_key])
-            )
-        )
+        # Create a faster sorting function by pre-computing sort keys
+        def get_sort_key(item):
+            value = item[sort_key]
+            is_na = value == 'N/A' or (isinstance(value, float) and math.isnan(value))
+            return (1 if is_na else 0, 
+                    0 if is_na else (-value if reverse else value))
+        
+        # Use the faster sorting approach
+        table_data.sort(key=get_sort_key)
         
         return table_data
 
@@ -647,12 +773,48 @@ class ExchangeMonitorApp:
             logger.error(f"Error updating {table_id} table with data: {e}")
 
     def _optimize_table_update(self, table, new_data):
-        """Rebuild the specified table completely to ensure correct sorting"""
+        """More efficient table update that avoids full rebuilds when possible"""
         try:
-            # Get current items for later cleanup
-            current_items = set(table.get_children())
+            # Get current items
+            current_items = list(table.get_children())
             
-            # Clear the entire table to ensure proper order
+            # If the number of items hasn't changed, we can optimize by just reordering
+            if len(current_items) == len(new_data) and len(current_items) > 0:
+                # Map new order of items
+                new_order = {}
+                for i, item_data in enumerate(new_data):
+                    item_id = f"{item_data['exchange']}_{item_data['symbol']}"
+                    new_order[item_id] = i
+                
+                # Sort current_items according to new_order
+                current_items.sort(key=lambda item_id: new_order.get(item_id, 999999))
+                
+                # Reinsert items in new order
+                for item_id in current_items:
+                    table.move(item_id, '', 'end')
+                    
+                # Update values that might have changed
+                for item_data in new_data:
+                    item_id = f"{item_data['exchange']}_{item_data['symbol']}"
+                    values = (
+                        item_data['symbol'],
+                        item_data['exchange'],
+                        item_data['bid'],
+                        item_data['ask'],
+                        item_data['funding_rate'],
+                        item_data['spread_vs_spot'],
+                        item_data['spread_vs_binance'],
+                        item_data['spread_vs_okx'],
+                        item_data['spread_vs_bybit'],
+                        item_data['future_tick_size'],
+                        item_data['spot_tick_size'],
+                        item_data['change_24h']
+                    )
+                    table.item(item_id, values=values)
+                
+                return  # We're done, no need for full rebuild
+                
+            # Fall back to full rebuild if optimization not possible
             for item_id in current_items:
                 table.delete(item_id)
             
@@ -675,9 +837,10 @@ class ExchangeMonitorApp:
                 )
                 # Insert at the end to maintain sorted order
                 table.insert('', 'end', iid=item_id, values=values,
-                             tags=('even' if i % 2 == 0 else 'odd',))
+                            tags=('even' if i % 2 == 0 else 'odd',))
         except Exception as e:
             logger.error(f"Error updating table: {e}")
+
 
     def extract_number(self, value):
         """Extract numeric value from formatted string for sorting"""
@@ -830,9 +993,16 @@ class ExchangeMonitorApp:
         def update_tables():
             self.update_data_table()
             self.root.after(500, update_tables)  # Update every 500ms
-            
+        
+        # Schedule initial mirror sorting AFTER the first data update
+        def initial_mirror_sort():
+            self.apply_mirrored_sorting()
+            # Force update both tables to ensure they're populated
+            self.update_data_table(force_upper=True, force_lower=True)
+        
         # Start the scheduled functions
         clean_old_data()
         update_tables()
-
-
+        
+        # Delay initial mirroring by 2 seconds to ensure data is loaded
+        self.root.after(2000, initial_mirror_sort)
