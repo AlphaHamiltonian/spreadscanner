@@ -24,8 +24,9 @@ import pathlib
 
 LOG_FILE = pathlib.Path.cwd() / "exchange_monitor.log"
         # Set thresholds (configurable)
-FUTURES_THRESHOLD = 4  # Futures: 2 seconds
-SPOT_THRESHOLD = 8    # Spot: 10 seconds
+FUTURES_THRESHOLD = 30  # Futures: 2 seconds
+SPOT_THRESHOLD = 30    # Spot: 10 seconds
+DIFFERENCE_THRESHOLD = 4
 
 
 def init_logging(level: str = "INFO", *, logfile: str | pathlib.Path = LOG_FILE) -> None:

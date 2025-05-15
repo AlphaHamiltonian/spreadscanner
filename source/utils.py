@@ -6,7 +6,7 @@ import threading
 import requests
 from collections import deque
 import random
-from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD
+from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD, DIFFERENCE_THRESHOLD
 
 logger = logging.getLogger(__name__) # module-specific logger
 
@@ -491,7 +491,7 @@ class DataStore:
         max_age2 = SPOT_THRESHOLD if is_spot2 else FUTURES_THRESHOLD
         
         # Check if data is stale (using appropriate thresholds)
-        if price1_age > max_age1 or price2_age > max_age2:
+        if price1_age > max_age1 or price2_age > max_age2 or abs(price1_age-price2_age)> DIFFERENCE_THRESHOLD:
             # Log with threshold info (reduce volume with sampling)
             if random.random() < 0.0001:  # Log only 5% of occurrences
                 logger.warning(f"Stale data: {source1}({price1_age:.2f}s/{max_age1}s) vs "

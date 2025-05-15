@@ -1,0 +1,11 @@
+# Ignore all .log files
+*.log
+
+# Ignore the build directory
+build/
+
+# Ignore .env file
+.env
+
+# Compiled python modules
+*.pyc
