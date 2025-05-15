@@ -6,6 +6,7 @@ import threading
 import requests
 from collections import deque
 import random
+from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD
 
 logger = logging.getLogger(__name__) # module-specific logger
 
@@ -484,9 +485,6 @@ class DataStore:
         is_spot1 = symbol1 and "_SPOT" in symbol1
         is_spot2 = symbol2 and "_SPOT" in symbol2
         
-        # Set thresholds (configurable)
-        FUTURES_THRESHOLD = 5  # Futures: 2 seconds
-        SPOT_THRESHOLD = 10    # Spot: 10 seconds
         
         # Determine maximum allowed age for each source
         max_age1 = SPOT_THRESHOLD if is_spot1 else FUTURES_THRESHOLD

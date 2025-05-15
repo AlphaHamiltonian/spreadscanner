@@ -178,11 +178,11 @@ class ExchangeMonitorApp:
                             "showing both ends of the data range at once.")
     # Add this after the existing controls
         ttk.Label(control_frame, text="Max Rows:").grid(row=0, column=12, padx=5, pady=5, sticky=tk.W)
-        self.max_rows_var = tk.StringVar(value="50")
+        self.max_rows_var = tk.StringVar(value="20")
         max_rows_combo = ttk.Combobox(
             control_frame,
             textvariable=self.max_rows_var,
-            values=["50", "500", "All"],
+            values=["20", "100", "All"],
             width=5,
             state="readonly"
         )
@@ -503,51 +503,58 @@ class ExchangeMonitorApp:
         if table_id == "upper":
             logger.info(f"Applying upper sort: {self.upper_sort_column_var.get()} ({self.upper_sort_direction_var.get()})")
             
-            # For sorting, do it directly in the main thread for faster response
-            try:
-                # Get all symbols from all exchanges
-                all_symbols = {}
-                for exchange in ['binance', 'bybit', 'okx']:
-                    symbols = data_store.get_symbols(exchange)
-                    all_symbols[exchange] = set(symbols)
-                
-                # Prepare upper table data
-                upper_table_data = self._prepare_table_data(
+            # Schedule the actual sort in a background thread
+            self.executor.submit(self._background_sort_and_update, table_id)
+        else:
+            logger.info(f"Applying lower sort: {self.lower_sort_column_var.get()} ({self.lower_sort_direction_var.get()})")
+            
+            # Schedule the actual sort in a background thread
+            self.executor.submit(self._background_sort_and_update, table_id)
+        
+        # Show immediate visual feedback that something is happening
+        self.root.config(cursor="watch")
+
+    def _background_sort_and_update(self, table_id):
+        """Background worker for sorting and updating tables"""
+        try:
+            # Get all symbols from all exchanges
+            all_symbols = {}
+            for exchange in ['binance', 'bybit', 'okx']:
+                symbols = data_store.get_symbols(exchange)
+                all_symbols[exchange] = set(symbols)
+            
+            # Prepare table data based on which table we're sorting
+            if table_id == "upper":
+                table_data = self._prepare_table_data(
                     all_symbols, 
                     self.upper_sort_column_var.get(),
                     self.upper_sort_direction_var.get()
                 )
                 
-                # Update UI directly
-                self._update_ui_with_data(self.upper_table, upper_table_data, "upper")
-            except Exception as e:
-                logger.error(f"Error in direct sorting: {e}")
-                # Fall back to background processing if error occurs
-                self.update_data_table(force_upper=True)
-        else:
-            logger.info(f"Applying lower sort: {self.lower_sort_column_var.get()} ({self.lower_sort_direction_var.get()})")
-            
-            # Similar direct processing for lower table
-            try:
-                # Get all symbols from all exchanges
-                all_symbols = {}
-                for exchange in ['binance', 'bybit', 'okx']:
-                    symbols = data_store.get_symbols(exchange)
-                    all_symbols[exchange] = set(symbols)
-                
-                # Prepare lower table data
-                lower_table_data = self._prepare_table_data(
+                # Update UI in main thread
+                self.root.after(0, lambda: self._finalize_ui_update(self.upper_table, table_data, "upper"))
+            else:
+                table_data = self._prepare_table_data(
                     all_symbols, 
                     self.lower_sort_column_var.get(),
                     self.lower_sort_direction_var.get()
                 )
                 
-                # Update UI directly
-                self._update_ui_with_data(self.lower_table, lower_table_data, "lower")
-            except Exception as e:
-                logger.error(f"Error in direct sorting: {e}")
-                # Fall back to background processing if error occurs
-                self.update_data_table(force_lower=True)
+                # Update UI in main thread
+                self.root.after(0, lambda: self._finalize_ui_update(self.lower_table, table_data, "lower"))
+        except Exception as e:
+            logger.error(f"Error in background sorting: {e}")
+            # Reset cursor in main thread
+            self.root.after(0, lambda: self.root.config(cursor=""))
+
+    def _finalize_ui_update(self, table, table_data, table_id):
+        """Update UI with the sorted data and reset cursor"""
+        try:
+            self._update_ui_with_data(table, table_data, table_id)
+            self.root.config(cursor="")  # Reset cursor
+        except Exception as e:
+            logger.error(f"Error in UI update: {e}")
+            self.root.config(cursor="")  # Always reset cursor
 
     def apply_filter(self):
         """Apply symbol filter to both data tables"""
@@ -700,17 +707,25 @@ class ExchangeMonitorApp:
         
         # Log sorting parameters for debugging
         logger.debug(f"Sorting by {sort_column} in {sort_direction} order")
-        
+            
+        # More efficient sorting approach
         sort_key = sort_mapping.get(sort_column, 'symbol')
         reverse = (sort_direction == 'descending')
         
-        # Sort with N/A values always at the bottom, regardless of sort direction
-        # Create a faster sorting function by pre-computing sort keys
+        # Pre-compute keys once for faster sorting
         def get_sort_key(item):
             value = item[sort_key]
             is_na = value == 'N/A' or (isinstance(value, float) and math.isnan(value))
-            return (1 if is_na else 0, 
-                    0 if is_na else (-value if reverse else value))
+            
+            # Fix for handling string values during reverse sorting
+            if reverse:
+                if isinstance(value, (int, float)) and not is_na:
+                    return (1 if is_na else 0, -value)
+                else:
+                    # For strings, we invert the sort order without using unary minus
+                    return (1 if is_na else 0, "" if is_na else value)
+            else:
+                return (1 if is_na else 0, value)
         
         # Use the faster sorting approach
         table_data.sort(key=get_sort_key)
@@ -939,49 +954,64 @@ class ExchangeMonitorApp:
         except (ValueError, AttributeError):
             return float('nan')
 
+    # Modify the start_exchange_threads method in source/ui.py
     def start_exchange_threads(self):
-        """Start data collection threads for the selected exchange"""
+        """Start data collection threads for the selected exchange in background"""
         selected_exchange = self.exchange_var.get()
         
-        # Fetch symbols first for all exchanges
-        if selected_exchange == "all" or selected_exchange == "binance":
-            self.binance.fetch_symbols()
-            self.binance.fetch_spot_symbols()
-            
-        if selected_exchange == "all" or selected_exchange == "bybit":
-            # self.bybit.fetch_symbols()
-            # self.bybit.fetch_spot_symbols()
-            self.bybit.initialize()  # This will handle everything in the proper sequence
-            
-        if selected_exchange == "all" or selected_exchange == "okx":
-            self.okx.fetch_symbols()
-            self.okx.fetch_spot_symbols()
-            
-        # Short delay to ensure symbols are loaded
-        time.sleep(1)
+        # Define a worker function to initialize an exchange connector in background
+        def initialize_exchange(exchange_name, connector):
+            try:
+                logger.info(f"Initializing {exchange_name} connector in background thread")
+                
+                if exchange_name == "binance":
+                    connector.fetch_symbols()
+                    connector.fetch_spot_symbols()
+                    connector.connect_futures_websocket()
+                    connector.connect_spot_websocket()
+                    active_threads[f"{exchange_name}_funding"] = self.executor.submit(connector.update_funding_rates)
+                    active_threads[f"{exchange_name}_changes"] = self.executor.submit(connector.update_24h_changes)
+                    threading.Timer(30, connector.check_symbol_freshness).start()
+                elif exchange_name == "bybit":
+                    # This already handles everything in the proper sequence
+                    connector.initialize()
+                elif exchange_name == "okx":
+                    connector.fetch_symbols()
+                    connector.fetch_spot_symbols()
+                    connector.connect_websocket()
+                    connector.connect_spot_websocket()
+                    active_threads[f"{exchange_name}_funding"] = self.executor.submit(connector.update_funding_rates)
+                    active_threads[f"{exchange_name}_changes"] = self.executor.submit(connector.update_24h_changes)
+                
+                logger.info(f"Completed initializing {exchange_name} connector")
+            except Exception as e:
+                logger.error(f"Error initializing {exchange_name} connector: {e}")
         
-        # Now connect WebSockets and start other threads
+        # Start background threads for selected exchanges
         if selected_exchange == "all" or selected_exchange == "binance":
-            # Start Binance threads
-            self.binance.connect_futures_websocket()
-            self.binance.connect_spot_websocket()
-            active_threads["binance_funding"] = self.executor.submit(self.binance.update_funding_rates)
-            active_threads["binance_changes"] = self.executor.submit(self.binance.update_24h_changes)
-            threading.Timer(30, self.binance.check_symbol_freshness).start()        
-            
+            threading.Thread(
+                target=initialize_exchange,
+                args=("binance", self.binance),
+                daemon=True,
+                name="binance_init_thread"
+            ).start()
+        
         if selected_exchange == "all" or selected_exchange == "bybit":
-            # Start Bybit threads
-            self.bybit.connect_websocket()
-            self.bybit.connect_spot_websocket()
-            active_threads["bybit_funding"] = self.executor.submit(self.bybit.update_funding_rates)
-            active_threads["bybit_changes"] = self.executor.submit(self.bybit.update_24h_changes)       
+            threading.Thread(
+                target=initialize_exchange,
+                args=("bybit", self.bybit),
+                daemon=True,
+                name="bybit_init_thread"
+            ).start()
             
         if selected_exchange == "all" or selected_exchange == "okx":
-            # Start OKX threads
-            self.okx.connect_websocket()
-            self.okx.connect_spot_websocket()
-            active_threads["okx_funding"] = self.executor.submit(self.okx.update_funding_rates)
-            active_threads["okx_changes"] = self.executor.submit(self.okx.update_24h_changes)
+            threading.Thread(
+                target=initialize_exchange,
+                args=("okx", self.okx),
+                daemon=True,
+                name="okx_init_thread"
+            ).start()
+
     def restart_exchange_threads(self):
         """Stop and restart exchange data threads with better shutdown"""
         logger.info("Restarting exchange threads...")
@@ -994,12 +1024,24 @@ class ExchangeMonitorApp:
         if hasattr(self, 'executor'):
             self.executor.shutdown(wait=False)
             
-        # Close all WebSocket connections
-        for exchange in [self.binance, self.bybit, self.okx]:
-            for name, manager in exchange.websocket_managers.items():
-                if hasattr(manager, 'disconnect'):
-                    manager.disconnect()
-                    
+        # Close all WebSocket connections in a background thread to avoid UI freeze
+        def close_connections():
+            try:
+                for exchange in [self.binance, self.bybit, self.okx]:
+                    for name, manager in exchange.websocket_managers.items():
+                        if hasattr(manager, 'disconnect'):
+                            manager.disconnect()
+                        elif isinstance(manager, dict) and 'ws' in manager and manager['ws']:
+                            try:
+                                manager['ws'].close()
+                            except:
+                                pass
+            except Exception as e:
+                logger.error(f"Error closing connections: {e}")
+        
+        # Run connection closing in background
+        threading.Thread(target=close_connections, daemon=True, name="connection_closer").start()
+        
         # Clear active threads dictionary
         active_threads.clear()
         

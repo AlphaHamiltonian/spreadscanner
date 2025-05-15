@@ -66,16 +66,16 @@ jobs:
         
       - name: Rename output (Windows)
         if: matrix.platform == 'Windows'
-        run: Rename-Item allmonitor.exe ExchangeMonitor-Windows.exe
+        run: Rename-Item run.exe ExchangeMonitor-Windows.exe
         shell: pwsh
         
       - name: Rename output (Linux)
         if: matrix.platform == 'Linux'
-        run: mv allmonitor.bin ExchangeMonitor-Linux
+        run: mv run.bin ExchangeMonitor-Linux
         
       - name: Rename output (macOS)
         if: matrix.platform == 'macOS'
-        run: mv allmonitor.bin ExchangeMonitor-macOS
+        run: mv run.bin ExchangeMonitor-macOS
         
       - name: Upload artifact (Windows)
         if: matrix.platform == 'Windows'

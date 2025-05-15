@@ -23,6 +23,10 @@ import logging.config
 import pathlib
 
 LOG_FILE = pathlib.Path.cwd() / "exchange_monitor.log"
+        # Set thresholds (configurable)
+FUTURES_THRESHOLD = 4  # Futures: 2 seconds
+SPOT_THRESHOLD = 8    # Spot: 10 seconds
+
 
 def init_logging(level: str = "INFO", *, logfile: str | pathlib.Path = LOG_FILE) -> None:
     fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
