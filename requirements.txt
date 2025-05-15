@@ -4,7 +4,7 @@ websocket-client>=1.2.3
 
 # Performance-optimized JSON parsing
 orjson>=3.8.0  # Used in your code instead of ujson
-
+plyer>=2.1.0
 # GUI dependencies
 # Note: tkinter comes with Python installation
 # but on Linux may need to be installed separately with:

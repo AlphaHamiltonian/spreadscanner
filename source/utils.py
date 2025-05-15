@@ -7,7 +7,13 @@ import requests
 from collections import deque
 import random
 from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD, DIFFERENCE_THRESHOLD
+from plyer import notification 
+import tkinter as tk
+from tkinter import messagebox
 
+TELEGRAM_ENABLED = True  # Set to True to enable Telegram notifications
+TELEGRAM_BOT_TOKEN = "REDACTED_TOKEN"  # Replace with your bot token
+TELEGRAM_CHAT_ID = "REDACTED_CHAT_ID"  # Replace with your group chat ID
 logger = logging.getLogger(__name__) # module-specific logger
 
 class WebSocketManager:
@@ -458,6 +464,9 @@ class DataStore:
                     }
             
             self.spread_timestamp = current_time
+
+
+
     def _calculate_spread(self, price1, price2, exchange1=None, symbol1=None, exchange2=None, symbol2=None):
         """Calculate spread with different staleness thresholds for futures vs spot"""
         # Basic validation
@@ -514,6 +523,43 @@ class DataStore:
         
         # Express as percentage
         spread_pct = avg_ratio * 100
+        threshold_pct = 3
+        if abs(spread_pct) > threshold_pct:
+
+            def send_telegram_message(message):
+                """Send a message via Telegram bot."""
+                if not TELEGRAM_ENABLED:
+                    print("Telegram notifications are disabled.")
+                    return False
+                
+                if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+                    print("Telegram bot token or chat ID not configured.")
+                    return False
+                
+                try:
+                    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+                    data = {
+                        "chat_id": TELEGRAM_CHAT_ID,
+                        "text": message,
+                        "parse_mode": "HTML"  # Enable HTML formatting
+                    }
+                    response = requests.post(url, data=data)
+                    
+                    if response.status_code == 200:
+                        print(f"Telegram message sent successfully.")
+                        return True
+                    else:
+                        print(f"Failed to send Telegram message. Status code: {response.status_code}")
+                        print(f"Response: {response.text}")
+                        return False
+                        
+                except Exception as e:
+                    print(f"Error sending Telegram message: {e}")
+                    return False
+            notification_message = f"{source1} vs {source2}:{spread_pct} over {threshold_pct}%"
+            # Play system bell sound
+            send_telegram_message(notification_message)
+
         return spread_pct
     def get_spread(self, exchange, symbol, spread_type='vs_spot'):
         """Get pre-calculated spread value"""
