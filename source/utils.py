@@ -6,7 +6,7 @@ import threading
 import requests
 from collections import deque
 import random
-from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD, DIFFERENCE_THRESHOLD
+from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD, DIFFERENCE_THRESHOLD, UPPER_LIMIT, LOWER_LIMIT
 from plyer import notification 
 import tkinter as tk
 from tkinter import messagebox
@@ -526,7 +526,7 @@ class DataStore:
         # Express as percentage
         spread_pct = avg_ratio * 100
         threshold_pct = 3
-        if abs(spread_pct) > threshold_pct:
+        if spread_pct > UPPER_LIMIT or spread_pct < LOWER_LIMIT:
             # Create a unique key for this asset pair
             asset_pair_key = f"{source1}_vs_{source2}"
             
@@ -553,8 +553,11 @@ class DataStore:
             last_notif_time = self.last_notification_time.get(asset_pair_key, 0)
             
             if len(unique_seconds) >= 2 and current_time - last_notif_time > 1800:  # 30 minutes = 1800 seconds
-                notification_message = f"{source1} vs {source2}:{spread_pct:.2f}% over {threshold_pct}%"
-            
+                if spread_pct > UPPER_LIMIT:
+                    notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% above upper limit ({UPPER_LIMIT}%)"
+                else:  # spread_pct < LOWER_LIMIT
+                    notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% below lower limit ({LOWER_LIMIT}%)"
+                
                 def send_telegram_message(message):
                     """Send a message via Telegram bot."""
                     if not TELEGRAM_ENABLED:
@@ -586,8 +589,10 @@ class DataStore:
                         print(f"Error sending Telegram message: {e}")
                         return False
                 # Play system bell sound
-                send_telegram_message(notification_message)
-
+                success = send_telegram_message(notification_message)
+                if success:
+                    self.last_notification_time[asset_pair_key] = current_time
+                    logger.info(f"Notification sent for {asset_pair_key}. Next notification in 30 minutes.")
         return spread_pct
     def get_spread(self, exchange, symbol, spread_type='vs_spot'):
         """Get pre-calculated spread value"""
