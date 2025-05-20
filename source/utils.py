@@ -549,7 +549,7 @@ class DataStore:
             # 2. No notification sent in the past 30 minutes for this asset pair
             last_notif_time = self.last_notification_time.get(asset_pair_key, 0)
             
-            if len(unique_seconds) >= 2 and current_time - last_notif_time > 1800:  # 30 minutes = 1800 seconds
+            if len(unique_seconds) >= 3 and current_time - last_notif_time > 1800:  # 30 minutes = 1800 seconds
                 if spread_pct > UPPER_LIMIT:
                     notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% above upper limit ({UPPER_LIMIT}%)"
                 else:  # spread_pct < LOWER_LIMIT
