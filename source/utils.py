@@ -354,7 +354,9 @@ class DataStore:
     def __init__(self):
         # Keep original global lock for backward compatibility
         self.lock = threading.RLock()
-        
+        self.threshold_timestamps = {}  # Track when thresholds are exceeded for each asset pair
+        self.last_notification_time = {}  # Track when the last notification was sent
+
         # Exchange-specific locks for parallel processing
         self.exchange_locks = {
             'binance': threading.RLock(),
@@ -525,40 +527,66 @@ class DataStore:
         spread_pct = avg_ratio * 100
         threshold_pct = 3
         if abs(spread_pct) > threshold_pct:
-
-            def send_telegram_message(message):
-                """Send a message via Telegram bot."""
-                if not TELEGRAM_ENABLED:
-                    print("Telegram notifications are disabled.")
-                    return False
-                
-                if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-                    print("Telegram bot token or chat ID not configured.")
-                    return False
-                
-                try:
-                    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-                    data = {
-                        "chat_id": TELEGRAM_CHAT_ID,
-                        "text": message,
-                        "parse_mode": "HTML"  # Enable HTML formatting
-                    }
-                    response = requests.post(url, data=data)
-                    
-                    if response.status_code == 200:
-                        print(f"Telegram message sent successfully.")
-                        return True
-                    else:
-                        print(f"Failed to send Telegram message. Status code: {response.status_code}")
-                        print(f"Response: {response.text}")
+            # Create a unique key for this asset pair
+            asset_pair_key = f"{source1}_vs_{source2}"
+            
+            # Get current time
+            current_time = time.time()
+            
+            # Initialize timestamp list for this asset pair if it doesn't exist
+            if asset_pair_key not in self.threshold_timestamps:
+                self.threshold_timestamps[asset_pair_key] = []
+            
+            # Add current timestamp to the list
+            self.threshold_timestamps[asset_pair_key].append(current_time)
+            
+            # Remove timestamps older than 5 seconds
+            self.threshold_timestamps[asset_pair_key] = [ts for ts in self.threshold_timestamps[asset_pair_key] 
+                                                    if current_time - ts <= 5]
+            
+            # Count unique seconds in the timestamp list
+            unique_seconds = set(int(ts) for ts in self.threshold_timestamps[asset_pair_key])
+            
+            # Check if notification criteria are met:
+            # 1. At least 2 unique seconds in the past 5 seconds
+            # 2. No notification sent in the past 30 minutes for this asset pair
+            last_notif_time = self.last_notification_time.get(asset_pair_key, 0)
+            
+            if len(unique_seconds) >= 2 and current_time - last_notif_time > 1800:  # 30 minutes = 1800 seconds
+                notification_message = f"{source1} vs {source2}:{spread_pct:.2f}% over {threshold_pct}%"
+            
+                def send_telegram_message(message):
+                    """Send a message via Telegram bot."""
+                    if not TELEGRAM_ENABLED:
+                        print("Telegram notifications are disabled.")
                         return False
+                    
+                    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+                        print("Telegram bot token or chat ID not configured.")
+                        return False
+                    
+                    try:
+                        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+                        data = {
+                            "chat_id": TELEGRAM_CHAT_ID,
+                            "text": message,
+                            "parse_mode": "HTML"  # Enable HTML formatting
+                        }
+                        response = requests.post(url, data=data)
                         
-                except Exception as e:
-                    print(f"Error sending Telegram message: {e}")
-                    return False
-            notification_message = f"{source1} vs {source2}:{spread_pct} over {threshold_pct}%"
-            # Play system bell sound
-            send_telegram_message(notification_message)
+                        if response.status_code == 200:
+                            print(f"Telegram message sent successfully.")
+                            return True
+                        else:
+                            print(f"Failed to send Telegram message. Status code: {response.status_code}")
+                            print(f"Response: {response.text}")
+                            return False
+                            
+                    except Exception as e:
+                        print(f"Error sending Telegram message: {e}")
+                        return False
+                # Play system bell sound
+                send_telegram_message(notification_message)
 
         return spread_pct
     def get_spread(self, exchange, symbol, spread_type='vs_spot'):
