@@ -7,9 +7,6 @@ import requests
 from collections import deque
 import random
 from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD, DIFFERENCE_THRESHOLD, UPPER_LIMIT, LOWER_LIMIT
-from plyer import notification 
-import tkinter as tk
-from tkinter import messagebox
 
 TELEGRAM_ENABLED = True  # Set to True to enable Telegram notifications
 TELEGRAM_BOT_TOKEN = "REDACTED_TOKEN"  # Replace with your bot token
