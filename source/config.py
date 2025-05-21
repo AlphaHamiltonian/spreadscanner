@@ -29,6 +29,8 @@ SPOT_THRESHOLD = 3    # Spot: 10 seconds
 DIFFERENCE_THRESHOLD = 1
 UPPER_LIMIT = 1
 LOWER_LIMIT = -2
+DELETE_OLD_TIME = 10
+NUMBER_OF_SEC_THRESHOLD = 5
 
 
 def init_logging(level: str = "INFO", *, logfile: str | pathlib.Path = LOG_FILE) -> None:
