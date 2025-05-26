@@ -164,18 +164,18 @@ class ExchangeMonitorApp:
         self.filter_var.trace("w", lambda *args: self.apply_filter())
 
         # Mirror sort checkbox
-        self.mirror_sort_var = tk.BooleanVar(value=True)
-        mirror_sort_chk = ttk.Checkbutton(
-            control_frame,
-            text="Mirror Sort Tables",
-            variable=self.mirror_sort_var
-        )
-        mirror_sort_chk.grid(row=0, column=4, padx=15, pady=5, sticky=tk.W)
+        # self.mirror_sort_var = tk.BooleanVar(value=True)
+        # mirror_sort_chk = ttk.Checkbutton(
+        #     control_frame,
+        #     text="Mirror Sort Tables",
+        #     variable=self.mirror_sort_var
+        # )
+        # mirror_sort_chk.grid(row=0, column=4, padx=15, pady=5, sticky=tk.W)
 
         # Add tooltip to mirror sort checkbox
-        ToolTip(mirror_sort_chk, "When enabled, sorting one table will automatically\n"
-                            "sort the other table in the opposite direction,\n"
-                            "showing both ends of the data range at once.")
+        # ToolTip(mirror_sort_chk, "When enabled, sorting one table will automatically\n"
+        #                     "sort the other table in the opposite direction,\n"
+        #                     "showing both ends of the data range at once.")
     # Add this after the existing controls
         ttk.Label(control_frame, text="Max Rows:").grid(row=0, column=12, padx=5, pady=5, sticky=tk.W)
         self.max_rows_var = tk.StringVar(value="20")
