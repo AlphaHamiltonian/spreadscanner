@@ -8,7 +8,7 @@ import websocket
 from source.config import stop_event
 import time
 from source.exchanges.base import BaseExchangeConnector
-from source.utils import data_store, WebSocketManager
+from source.utils import data_store, WebSocketManager, WriteLock
 
 logger = logging.getLogger(__name__) # module-specific logger
 
@@ -23,7 +23,8 @@ class BinanceConnector(BaseExchangeConnector):
             return
         try:
             current_time = time.time()
-            with data_store.lock:
+            # Use read lock for checking data freshness
+            with data_store.exchange_rw_locks['binance']:
                 symbols = data_store.get_symbols('binance')
                 stale_count = 0
                 total_count = len(symbols)
@@ -190,7 +191,8 @@ class BinanceConnector(BaseExchangeConnector):
             response = self.session.get('https://fapi.binance.com/fapi/v1/exchangeInfo')
             if response.status_code == 200:
                 data = response.json()
-                with data_store.lock:
+                # Use write lock for modifying symbols and tick sizes
+                with WriteLock(data_store.exchange_rw_locks['binance']):
                     data_store.symbols['binance'].clear()
                     for symbol_info in data['symbols']:
                         if symbol_info['status'] == 'TRADING':
@@ -216,7 +218,8 @@ class BinanceConnector(BaseExchangeConnector):
                 data = response.json()
                 futures_symbols = data_store.get_symbols('binance')
                 
-                with data_store.lock:
+                # Use write lock for modifying tick sizes
+                with WriteLock(data_store.exchange_rw_locks['binance']):
                     for symbol_info in data['symbols']:
                         # Convert spot symbols to match futures format if needed
                         spot_symbol = symbol_info['symbol']
@@ -255,19 +258,12 @@ class BinanceConnector(BaseExchangeConnector):
                         
                     symbol = data['s']
                     
-                    # Update directly without queueing
-                    with data_store.lock:
-                        if symbol not in data_store.price_data['binance']:
-                            data_store.price_data['binance'][symbol] = {}
-                            
-                        data_store.price_data['binance'][symbol].update({
-                            'bid': float(data['b']),
-                            'ask': float(data['a']),
-                            'bidQty': float(data['B']),
-                            'askQty': float(data['A']),
-                            'timestamp': time.time()
-                        })
-                        data_store.update_counters['binance'] += 1
+                    # Update using the new method (already uses write locks internally)
+                    data_store.update_price_direct(
+                        'binance', symbol, 
+                        float(data['b']), float(data['a']),
+                        bid_qty=float(data['B']), ask_qty=float(data['A'])
+                    )
                 except Exception as e:
                     logger.error(f"Error processing Binance futures data: {e}")
                     
@@ -551,7 +547,8 @@ class BinanceConnector(BaseExchangeConnector):
             
             if response.status_code == 200:
                 data = response.json()
-                with data_store.lock:
+                # Use write lock for updating daily changes
+                with WriteLock(data_store.exchange_rw_locks['binance']):
                     for item in data:
                         symbol = item['symbol']
                         change_percent = float(item['priceChangePercent'])
@@ -564,7 +561,8 @@ class BinanceConnector(BaseExchangeConnector):
                     if response.status_code == 200:
                         item = response.json()
                         change_percent = float(item['priceChangePercent'])
-                        with data_store.lock:
+                        # Use write lock for updating daily changes
+                        with WriteLock(data_store.exchange_rw_locks['binance']):
                             data_store.daily_changes['binance'][symbol] = change_percent
         except Exception as e:
             logger.error(f"Error fetching 24h changes batch: {e}")

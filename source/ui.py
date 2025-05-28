@@ -1012,6 +1012,56 @@ class ExchangeMonitorApp:
                 name="okx_init_thread"
             ).start()
 
+    def start_health_monitor(self):
+        """Start a thread to monitor the health of connections"""
+        def health_monitor_worker():
+            while not stop_event.is_set():
+                try:
+                    # Check all WebSocket connections
+                    for exchange in [self.binance, self.bybit, self.okx]:
+                        for name, manager in exchange.websocket_managers.items():
+                            if hasattr(manager, 'check_health'):
+                                manager.check_health()
+                                
+                    # Log data freshness statistics occasionally
+                    if random.random() < 0.05:  # Log 5% of the time
+                        exchange_stats = {}
+                        current_time = time.time()
+                        
+                        for exchange in ['binance', 'bybit', 'okx']:
+                            fresh_count = 0
+                            stale_count = 0
+                            
+                            # Use per-exchange read lock instead of global lock
+                            with data_store.exchange_rw_locks[exchange]:
+                                for symbol, data in data_store.price_data[exchange].items():
+                                    if 'timestamp' in data:
+                                        if current_time - data['timestamp'] < 30:
+                                            fresh_count += 1
+                                        else:
+                                            stale_count += 1
+                                            
+                            exchange_stats[exchange] = f"{fresh_count} fresh, {stale_count} stale"
+                            
+                        logger.info(f"Data freshness: Binance: {exchange_stats['binance']}, "
+                                f"Bybit: {exchange_stats['bybit']}, OKX: {exchange_stats['okx']}")
+                except Exception as e:
+                    logger.error(f"Error in health monitor: {e}")
+                    
+                # Check every 5 seconds
+                for _ in range(5):
+                    if stop_event.is_set():
+                        break
+                    time.sleep(1)
+                    
+        self.health_monitor = threading.Thread(
+            target=health_monitor_worker,
+            daemon=True,
+            name="health_monitor"
+        )
+        self.health_monitor.start()
+        active_threads["health_monitor"] = self.health_monitor
+
     def restart_exchange_threads(self):
         """Stop and restart exchange data threads with better shutdown"""
         logger.info("Restarting exchange threads...")
@@ -1048,9 +1098,9 @@ class ExchangeMonitorApp:
         # Reset stop event flag
         stop_event.clear()
         
-        # Clear data caches to prevent stale data
-        with data_store.lock:
-            for exchange in data_store.price_data:
+        # Clear data caches to prevent stale data - use per-exchange write locks
+        for exchange in list(data_store.price_data.keys()):
+            with WriteLock(data_store.exchange_rw_locks[exchange]):
                 data_store.price_data[exchange].clear()
                 data_store.update_counters[exchange] = 0
                 
@@ -1060,55 +1110,6 @@ class ExchangeMonitorApp:
         # Start new threads                                
         logger.info("Starting new exchange threads...")
         self.start_exchange_threads()
-
-    def start_health_monitor(self):
-        """Start a thread to monitor the health of connections"""
-        def health_monitor_worker():
-            while not stop_event.is_set():
-                try:
-                    # Check all WebSocket connections
-                    for exchange in [self.binance, self.bybit, self.okx]:
-                        for name, manager in exchange.websocket_managers.items():
-                            if hasattr(manager, 'check_health'):
-                                manager.check_health()
-                                
-                    # Log data freshness statistics occasionally
-                    if random.random() < 0.05:  # Log 5% of the time
-                        exchange_stats = {}
-                        current_time = time.time()
-                        
-                        for exchange in ['binance', 'bybit', 'okx']:
-                            fresh_count = 0
-                            stale_count = 0
-                            
-                            with data_store.lock:
-                                for symbol, data in data_store.price_data[exchange].items():
-                                    if 'timestamp' in data:
-                                        if current_time - data['timestamp'] < 30:
-                                            fresh_count += 1
-                                        else:
-                                            stale_count += 1
-                                            
-                            exchange_stats[exchange] = f"{fresh_count} fresh, {stale_count} stale"
-                            
-                        logger.info(f"Data freshness: Binance: {exchange_stats['binance']}, "
-                                  f"Bybit: {exchange_stats['bybit']}, OKX: {exchange_stats['okx']}")
-                except Exception as e:
-                    logger.error(f"Error in health monitor: {e}")
-                    
-                # Check every 5 seconds
-                for _ in range(5):
-                    if stop_event.is_set():
-                        break
-                    time.sleep(1)
-                    
-        self.health_monitor = threading.Thread(
-            target=health_monitor_worker,
-            daemon=True,
-            name="health_monitor"
-        )
-        self.health_monitor.start()
-        active_threads["health_monitor"] = self.health_monitor
 
     def schedule_updates(self):
         """Schedule periodic UI updates and maintenance tasks"""

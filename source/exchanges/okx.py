@@ -6,7 +6,7 @@ import orjson as json
 from source.config import stop_event
 import time
 from source.exchanges.base import BaseExchangeConnector
-from source.utils import data_store, WebSocketManager
+from source.utils import data_store, WebSocketManager, WriteLock
 
 logger = logging.getLogger(__name__) # module-specific logger
 
@@ -73,7 +73,7 @@ class OkxConnector(BaseExchangeConnector):
                             bid_qty = float(book_data['bids'][0][1])
                             ask_qty = float(book_data['asks'][0][1])
                             
-                            # DIRECT UPDATE - no queue
+                            # Update using the new method (already uses write locks internally)
                             data_store.update_price_direct(
                                 'okx', symbol, best_bid, best_ask, bid_qty, ask_qty
                             )
@@ -311,7 +311,8 @@ class OkxConnector(BaseExchangeConnector):
                 futures_symbols = data_store.get_symbols('okx')
                 
                 if data['code'] == '0' and 'data' in data:
-                    with data_store.lock:
+                    # Use write lock for updating tick sizes
+                    with WriteLock(data_store.exchange_rw_locks['okx']):
                         for symbol_info in data['data']:
                             if symbol_info['state'] == 'live':
                                 spot_symbol = symbol_info['instId']
@@ -388,7 +389,7 @@ class OkxConnector(BaseExchangeConnector):
                                 bid_qty = float(book_data['bids'][0][1])
                                 ask_qty = float(book_data['asks'][0][1])
                                 
-                                # Store the validated prices using direct update
+                                # Store using the new method (already uses write locks internally)
                                 data_store.update_price_direct(
                                     'okx', spot_key, best_bid, best_ask, bid_qty, ask_qty
                                 )
@@ -437,7 +438,8 @@ class OkxConnector(BaseExchangeConnector):
             if response.status_code == 200:
                 data = response.json()
                 if data['code'] == '0' and 'data' in data:
-                    with data_store.lock:
+                    # Use write lock for updating symbols and tick sizes
+                    with WriteLock(data_store.exchange_rw_locks['okx']):
                         data_store.symbols['okx'].clear()
                         for symbol_info in data['data']:
                             if symbol_info['state'] == 'live':
@@ -513,8 +515,8 @@ class OkxConnector(BaseExchangeConnector):
                 # Add small delay to avoid rate limits
                 time.sleep(0.1)
                 
-            # Apply all updates at once
-            with data_store.lock:
+            # Apply all updates at once - use write lock
+            with WriteLock(data_store.exchange_rw_locks['okx']):
                 for symbol, rate in results:
                     data_store.funding_rates['okx'][symbol] = rate
                     
@@ -582,8 +584,8 @@ class OkxConnector(BaseExchangeConnector):
                 # Sleep longer between requests to reduce rate limit issues
                 time.sleep(0.5)
                 
-            # Apply all updates at once
-            with data_store.lock:
+            # Apply all updates at once - use write lock
+            with WriteLock(data_store.exchange_rw_locks['okx']):
                 for symbol, change in results:
                     data_store.daily_changes['okx'][symbol] = change
                     

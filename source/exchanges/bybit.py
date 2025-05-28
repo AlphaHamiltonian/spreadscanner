@@ -8,7 +8,7 @@ import websocket
 from source.config import stop_event
 import time
 from source.exchanges.base import BaseExchangeConnector
-from source.utils import data_store, WebSocketManager
+from source.utils import data_store, WebSocketManager, WriteLock
 
 logger = logging.getLogger(__name__) # module-specific logger
 
@@ -241,18 +241,11 @@ class BybitConnector(BaseExchangeConnector):
                                 # Calculate mid price as approximation for "last"
                                 mid_price = (bid_price + ask_price) / 2
                                 
-                                # Direct update to data store
-                                with data_store.lock:
-                                    if spot_key not in data_store.price_data['bybit']:
-                                        data_store.price_data['bybit'][spot_key] = {}
-                                    data_store.price_data['bybit'][spot_key].update({
-                                        'bid': bid_price,
-                                        'ask': ask_price,
-                                        'bidQty': bid_qty,
-                                        'askQty': ask_qty,
-                                        'last': mid_price,  # Use mid price as proxy for last
-                                        'timestamp': time.time()
-                                    })
+                                # Use the new update method (already uses write locks internally)
+                                data_store.update_price_direct(
+                                    'bybit', spot_key, bid_price, ask_price,
+                                    bid_qty=bid_qty, ask_qty=ask_qty, last=mid_price
+                                )
                                     
                                 # Log occasionally for verification
                                 if random.random() < 0.001:
@@ -407,7 +400,8 @@ class BybitConnector(BaseExchangeConnector):
             # Only include linear futures category
             categories = ["linear"]  # REMOVED "inverse" - we only want USDT-margined
             
-            with data_store.lock:
+            # Use write lock for modifying symbols and tick sizes
+            with WriteLock(data_store.exchange_rw_locks['bybit']):
                 data_store.symbols['bybit'].clear()
                 
             for cat in categories:
@@ -419,7 +413,8 @@ class BybitConnector(BaseExchangeConnector):
                     if data['retCode'] == 0 and 'list' in data['result']:
                         instruments = data['result']['list']
                         
-                        with data_store.lock:
+                        # Use write lock for updating symbols and tick sizes
+                        with WriteLock(data_store.exchange_rw_locks['bybit']):
                             for symbol_info in instruments:
                                 if symbol_info['status'] == 'Trading':
                                     symbol = symbol_info['symbol']
@@ -498,7 +493,7 @@ class BybitConnector(BaseExchangeConnector):
                             bid_qty = float(book_data['b'][0][1])
                             ask_qty = float(book_data['a'][0][1])
                             
-                            # Direct update to data store - NO queueing
+                            # Update using the new method (already uses write locks internally)
                             data_store.update_price_direct(
                                 'bybit', symbol, best_bid, best_ask, bid_qty, ask_qty
                             )
@@ -683,8 +678,8 @@ class BybitConnector(BaseExchangeConnector):
             current_time = time.time()
             last_update_time = 0
             
-            # Find the most recent update time across all symbols
-            with data_store.lock:
+            # Find the most recent update time across all symbols - use read lock
+            with data_store.exchange_rw_locks['bybit']:
                 for symbol in data_store.price_data['bybit']:
                     if not symbol.endswith('_SPOT'):  # Only check futures
                         data = data_store.price_data['bybit'][symbol]
@@ -723,8 +718,8 @@ class BybitConnector(BaseExchangeConnector):
             futures_stale_symbols = []
             futures_total = 0
             
-            # Check which futures symbols are stale
-            with data_store.lock:
+            # Check which futures symbols are stale - use read lock
+            with data_store.exchange_rw_locks['bybit']:
                 futures_symbols = [s for s in data_store.get_symbols('bybit') if s.endswith('USDT')]
                 futures_total = len(futures_symbols)
                 
@@ -742,7 +737,7 @@ class BybitConnector(BaseExchangeConnector):
             if futures_stale_percent > 5 and futures_total > 20:  # More than 5% stale and at least 20 symbols
                 # Check when the most recent update was received for any symbol
                 most_recent_update = 0
-                with data_store.lock:
+                with data_store.exchange_rw_locks['bybit']:
                     for symbol in futures_symbols:
                         if symbol in data_store.price_data['bybit']:
                             data = data_store.price_data['bybit'][symbol]
@@ -764,10 +759,10 @@ class BybitConnector(BaseExchangeConnector):
             spot_stale_symbols = []
             spot_total = 0
             
-            # Check which spot symbols are stale
+            # Check which spot symbols are stale - use read lock
             expected_spot_symbols = set(getattr(data_store, 'bybit_spot_to_future_map', {}).keys())
             
-            with data_store.lock:
+            with data_store.exchange_rw_locks['bybit']:
                 spot_keys = [k for k in data_store.price_data['bybit'].keys() if k.endswith('_SPOT')]
                 spot_total = len(spot_keys)
                 
@@ -946,8 +941,8 @@ class BybitConnector(BaseExchangeConnector):
                 # Add small delay to avoid rate limits
                 time.sleep(0.1)
                 
-            # Apply all updates at once
-            with data_store.lock:
+            # Apply all updates at once - use write lock
+            with WriteLock(data_store.exchange_rw_locks['bybit']):
                 for symbol, rate in results:
                     data_store.funding_rates['bybit'][symbol] = rate
                     
@@ -1009,8 +1004,8 @@ class BybitConnector(BaseExchangeConnector):
                 # Add small delay to avoid rate limits
                 time.sleep(0.1)
                 
-            # Apply all updates at once
-            with data_store.lock:
+            # Apply all updates at once - use write lock
+            with WriteLock(data_store.exchange_rw_locks['bybit']):
                 for symbol, change in results:
                     data_store.daily_changes['bybit'][symbol] = change
                     
@@ -1092,7 +1087,7 @@ class BybitConnector(BaseExchangeConnector):
                                     bid_price = float(ticker.get('bid1Price', 0))
                                     ask_price = float(ticker.get('ask1Price', 0))
                                     
-                                    # Store in data store
+                                    # Store using the new method (already uses write locks internally)
                                     data_store.update_price_direct(
                                         'bybit', spot_key, bid_price, ask_price, 
                                         last=last_price
