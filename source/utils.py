@@ -667,11 +667,14 @@ class DataStore:
             return 'N/A'
 
     def get_symbols(self, exchange):
-        with self.lock:
+        with self.exchange_rw_locks[exchange]:  # Read lock for specific exchange
             return self.symbols[exchange].copy()
 
     def update_symbol_maps(self):
         """Update normalized symbol maps for all exchanges"""
+        # This method touches all exchanges and shared data, so we have two options:
+        
+        # Option 1: Use global lock (simpler, since this is infrequent)
         with self.lock:
             # Clear existing maps
             for exchange in self.symbol_maps:
@@ -685,7 +688,6 @@ class DataStore:
                     
             # Clear and rebuild equivalent symbol cache
             self.equivalent_symbols = {}
-
     def normalize_symbol(self, exchange, symbol):
         """Get normalized symbol with caching"""
         cache_key = f"{exchange}:{symbol}"
@@ -748,11 +750,11 @@ class DataStore:
             return self.price_data[exchange].get(symbol, {}).copy()
 
     def update_funding_rate(self, exchange, symbol, rate):
-        with self.lock:
+        with WriteLock(self.exchange_rw_locks[exchange]):  # Write lock for specific exchange
             self.funding_rates[exchange][symbol] = rate
 
     def get_funding_rate(self, exchange, symbol):
-        with self.lock:
+        with self.exchange_rw_locks[exchange]:  # Read lock for specific exchange
             return self.funding_rates[exchange].get(symbol, "N/A")
 
     def clean_old_data(self, max_age=3600):
