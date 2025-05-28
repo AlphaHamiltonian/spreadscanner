@@ -31,7 +31,7 @@ UPPER_LIMIT = 1
 LOWER_LIMIT = -4
 DELETE_OLD_TIME = 10
 NUMBER_OF_SEC_THRESHOLD = 5
-FUNDING_RATE_THRESHOLD = 0.009
+FUNDING_RATE_THRESHOLD = 0.9
 
 
 def init_logging(level: str = "INFO", *, logfile: str | pathlib.Path = LOG_FILE) -> None:

@@ -824,29 +824,20 @@ class DataStore:
             try:
                 r = float(str(rate).strip().rstrip("%"))
             except (ValueError, TypeError):
-                return                                   # ignore None / "N/A" / junk
-            if abs(r) > 1:                               # convert 1.23 → 0.0123
-                r /= 100.0
-
-            # --- 2. store -----------------------------------------------------------
-            with WriteLock(self.symbol_locks.get_lock(exchange, symbol)):
-                self.funding_rates.setdefault(exchange, {})[symbol] = r
-
+                return                               
             # --- 3. alert logic -----------------------------------------------------
-            if abs(r) < FUNDING_RATE_THRESHOLD:          # e.g. 0.01 for 1 %
-                return
+            if abs(r) >= FUNDING_RATE_THRESHOLD:         
+                key, now = (exchange, symbol), time.time()
+                if now - self.last_funding_notif_time.get(key, 0) < 1800:
+                    return                                   # still in 30-min cool-down
 
-            key, now = (exchange, symbol), time.time()
-            if now - self.last_funding_notif_time.get(key, 0) < 1800:
-                return                                   # still in 30-min cool-down
+                direction = "positive" if r > 0 else "negative"
+                pct = r                               # back to % for display
+                msg = f"⚠️ Funding rate alert\n{exchange}:{symbol} → {pct:.2f}% ({direction})"
 
-            direction = "positive" if r > 0 else "negative"
-            pct = r * 100                                # back to % for display
-            msg = f"⚠️ Funding rate alert\n{exchange}:{symbol} → {pct:.2f}% ({direction})"
-
-            if send_message(msg):
-                self.last_funding_notif_time[key] = now
-                logger.info("Funding alert sent for %s. Next in 30 min.", key)
+                if send_message(msg):
+                    self.last_funding_notif_time[key] = now
+                    logger.info("Funding alert sent for %s. Next in 30 min.", key)
 
     def get_funding_rate(self, exchange, symbol):
         symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
