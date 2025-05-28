@@ -105,7 +105,8 @@ class HeadlessMonitor:
                         fresh_count = 0
                         stale_count = 0
                         
-                        with data_store.lock:
+                        # Use per-exchange read lock instead of global lock
+                        with data_store.exchange_rw_locks[exchange]:
                             for symbol, data in data_store.price_data[exchange].items():
                                 if 'timestamp' in data:
                                     if current_time - data['timestamp'] < 30:
@@ -116,7 +117,7 @@ class HeadlessMonitor:
                         exchange_stats[exchange] = f"{fresh_count} fresh, {stale_count} stale"
                         
                     logger.info(f"Data freshness: Binance: {exchange_stats['binance']}, "
-                              f"Bybit: {exchange_stats['bybit']}, OKX: {exchange_stats['okx']}")
+                            f"Bybit: {exchange_stats['bybit']}, OKX: {exchange_stats['okx']}")
                 except Exception as e:
                     logger.error(f"Error in health monitor: {e}")
                     
@@ -133,7 +134,7 @@ class HeadlessMonitor:
         )
         self.health_monitor.start()
         active_threads["health_monitor"] = self.health_monitor
-    
+
     def shutdown(self):
         """Clean shutdown of all resources"""
         logger.info("Shutting down headless monitor...")
