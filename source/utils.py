@@ -7,8 +7,10 @@ import requests
 from collections import deque
 import random
 from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD, DIFFERENCE_THRESHOLD, UPPER_LIMIT, LOWER_LIMIT, DELETE_OLD_TIME, NUMBER_OF_SEC_THRESHOLD
+from source.message import send_message
 import threading
 from threading import RLock
+
 
 class ReaderWriterLock:
     """Allows multiple concurrent readers or one exclusive writer"""
@@ -104,9 +106,7 @@ class SymbolLockManager:
         if keys_to_remove:
             logging.getLogger(__name__).debug(f"Cleaned up {len(keys_to_remove)} unused symbol locks")
 
-TELEGRAM_ENABLED = False  # Set to True to enable Telegram notifications
-TELEGRAM_BOT_TOKEN = "REDACTED_TOKEN"  # Replace with your bot token
-TELEGRAM_CHAT_ID = "REDACTED_CHAT_ID"  # Replace with your group chat ID
+
 logger = logging.getLogger(__name__) # module-specific logger
 
 class WebSocketManager:
@@ -699,39 +699,8 @@ class DataStore:
                     notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% above upper limit ({UPPER_LIMIT}%)"
                 else:  # spread_pct < LOWER_LIMIT
                     notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% below lower limit ({LOWER_LIMIT}%)"
-                
-                def send_telegram_message(message):
-                    """Send a message via Telegram bot."""
-                    if not TELEGRAM_ENABLED:
-                        print("Telegram notifications are disabled.")
-                        return False
-                    
-                    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-                        print("Telegram bot token or chat ID not configured.")
-                        return False
-                    
-                    try:
-                        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-                        data = {
-                            "chat_id": TELEGRAM_CHAT_ID,
-                            "text": message,
-                            "parse_mode": "HTML"  # Enable HTML formatting
-                        }
-                        response = requests.post(url, data=data)
-                        
-                        if response.status_code == 200:
-                            print(f"Telegram message sent successfully.")
-                            return True
-                        else:
-                            print(f"Failed to send Telegram message. Status code: {response.status_code}")
-                            print(f"Response: {response.text}")
-                            return False
-                            
-                    except Exception as e:
-                        print(f"Error sending Telegram message: {e}")
-                        return False
-                # Play system bell sound
-                success = send_telegram_message(notification_message)
+                                # Play system bell sound
+                success = send_message(notification_message)
                 if success:
                     self.last_notification_time[asset_pair_key] = current_time
                     logger.info(f"Notification sent for {asset_pair_key}. Next notification in 30 minutes.")

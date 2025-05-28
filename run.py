@@ -9,6 +9,7 @@ import signal
 import time
 import argparse
 from source.utils import data_store
+from source.message import send_message
 
 # Disable WebSocket trace for cleaner logs
 websocket.enableTrace(False)
@@ -211,7 +212,7 @@ def main():
     parser.add_argument('--headless', action='store_true', 
                         help='Run in headless mode without UI (for servers)')
     args = parser.parse_args()
-    
+    send_message("Turning on telegram notifications")
     # Run in either headless or UI mode
     if args.headless:
         run_headless()
