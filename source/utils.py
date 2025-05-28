@@ -7,8 +7,60 @@ import requests
 from collections import deque
 import random
 from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD, DIFFERENCE_THRESHOLD, UPPER_LIMIT, LOWER_LIMIT, DELETE_OLD_TIME, NUMBER_OF_SEC_THRESHOLD
+import threading
+from threading import RLock
 
-TELEGRAM_ENABLED = True  # Set to True to enable Telegram notifications
+class ReaderWriterLock:
+    """Allows multiple concurrent readers or one exclusive writer"""
+    def __init__(self):
+        self._read_ready = threading.Condition(RLock())
+        self._readers = 0
+
+    def acquire_read(self):
+        self._read_ready.acquire()
+        try:
+            self._readers += 1
+        finally:
+            self._read_ready.release()
+
+    def release_read(self):
+        self._read_ready.acquire()
+        try:
+            self._readers -= 1
+            if self._readers == 0:
+                self._read_ready.notifyAll()
+        finally:
+            self._read_ready.release()
+
+    def acquire_write(self):
+        self._read_ready.acquire()
+        while self._readers > 0:
+            self._read_ready.wait()
+
+    def release_write(self):
+        self._read_ready.release()
+
+    def __enter__(self):
+        self.acquire_read()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.release_read()
+
+class WriteLock:
+    """Context manager for write access"""
+    def __init__(self, rw_lock):
+        self.rw_lock = rw_lock
+    
+    def __enter__(self):
+        self.rw_lock.acquire_write()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.rw_lock.release_write()
+
+
+TELEGRAM_ENABLED = False  # Set to True to enable Telegram notifications
 TELEGRAM_BOT_TOKEN = "REDACTED_TOKEN"  # Replace with your bot token
 TELEGRAM_CHAT_ID = "REDACTED_CHAT_ID"  # Replace with your group chat ID
 logger = logging.getLogger(__name__) # module-specific logger
@@ -354,7 +406,14 @@ class DataStore:
         self.threshold_timestamps = {}  # Track when thresholds are exceeded for each asset pair
         self.last_notification_time = {}  # Track when the last notification was sent
 
-        # Exchange-specific locks for parallel processing
+        # Exchange-specific reader-writer locks for better concurrency
+        self.exchange_rw_locks = {
+            'binance': ReaderWriterLock(),
+            'bybit': ReaderWriterLock(),
+            'okx': ReaderWriterLock()
+        }
+        
+        # Keep old exchange_locks for any legacy code that might still use them
         self.exchange_locks = {
             'binance': threading.RLock(),
             'bybit': threading.RLock(),
@@ -376,10 +435,10 @@ class DataStore:
         self.spreads = {'binance': {}, 'bybit': {}, 'okx': {}}
         self.spread_timestamp = 0
 
-        
+            
     def update_related_prices(self, exchange, future_symbol, future_data, spot_symbol=None, spot_data=None):
         """Update futures and spot data atomically to ensure consistent spread calculations"""
-        with self.lock:
+        with WriteLock(self.exchange_rw_locks[exchange]):  # Exchange-specific write lock
             timestamp = time.time()
             
             # Update future price
@@ -398,73 +457,72 @@ class DataStore:
             self.update_counters[exchange] += 1
 
     def calculate_all_spreads(self):
-        """Pre-calculate all spreads to avoid doing it during UI updates"""
-        with self.lock:  # Keep original lock for now
-            current_time = time.time()
-            
-            # For each exchange and symbol
-            for exchange in self.price_data:
-                if exchange not in self.spreads:
-                    self.spreads[exchange] = {}
-                    
-                for symbol in list(self.price_data[exchange].keys()):
-                    # Skip spot symbols
-                    if symbol.endswith('_SPOT'):
-                        continue
-                        
-                    # Get futures data
-                    future_data = self.price_data[exchange].get(symbol, {})
-                    if not future_data or 'bid' not in future_data or 'ask' not in future_data:
-                        continue
-                    
-                    # Calculate vs spot spread
-                    spot_key = f"{symbol}_SPOT"
-                    spot_data = self.price_data[exchange].get(spot_key, {})
-                    vs_spot = self._calculate_spread(
-                        future_data, spot_data,
-                        exchange, symbol,    # Exchange and symbol for futures
-                        exchange, spot_key   # Exchange and symbol for spot
-                    )
-                    
-                    # Calculate vs other exchanges spreads
-                    vs_binance = 'N/A'
-                    vs_okx = 'N/A'
-                    vs_bybit = 'N/A'
-                    
-                    for other_exchange in ['binance', 'bybit', 'okx']:
-                        if other_exchange == exchange:
-                            continue
-                        
-                        equiv_symbol = self.find_equivalent_symbol(exchange, symbol, other_exchange)
-                        if equiv_symbol:
-                            other_data = self.price_data.get(other_exchange, {}).get(equiv_symbol, {})
-                            if other_data and 'bid' in other_data and 'ask' in other_data:
-                                spread = self._calculate_spread(
-                                    future_data, other_data,
-                                    exchange, symbol,              # Source exchange/symbol
-                                    other_exchange, equiv_symbol   # Target exchange/symbol
-                                )
-                                
-                                # Store in appropriate variable
-                                if other_exchange == 'binance':
-                                    vs_binance = spread
-                                elif other_exchange == 'okx':
-                                    vs_okx = spread
-                                elif other_exchange == 'bybit':
-                                    vs_bybit = spread
-                    
-                    # Store all calculated spreads
-                    self.spreads[exchange][symbol] = {
-                        'vs_spot': vs_spot,
-                        'vs_binance': vs_binance,
-                        'vs_bybit': vs_bybit,
-                        'vs_okx': vs_okx,
-                        'timestamp': current_time
-                    }
-            
-            self.spread_timestamp = current_time
+        """Pre-calculate spreads using reader-writer locks for better concurrency.
+        
+        Multiple spread calculations can run simultaneously, but price updates
+        are exclusive.
+        """
+        current_time = time.time()
 
+        # ── 1️⃣  snapshot ALL exchange order books (read locks - concurrent) ─────────
+        exchange_snapshots = {}
+        for exchange in list(self.price_data.keys()):
+            with self.exchange_rw_locks[exchange]:  # Takes read lock
+                exchange_snapshots[exchange] = self.price_data[exchange].copy()
 
+        # ── 2️⃣  compute spreads on the snapshots (no locks) ─────────
+        for exchange in exchange_snapshots:
+            local_book = exchange_snapshots[exchange]
+            spreads_for_exch = self.spreads.setdefault(exchange, {})
+
+            for symbol, fut in local_book.items():
+                if symbol.endswith('_SPOT'):
+                    continue                         # skip spot rows
+
+                bid, ask = fut.get("bid"), fut.get("ask")
+                if bid is None or ask is None:
+                    continue                         # incomplete quote
+
+                # ↔ vs-spot
+                spot_key  = f"{symbol}_SPOT"
+                spot_data = local_book.get(spot_key, {})
+                vs_spot   = self._calculate_spread(
+                    fut, spot_data,
+                    exchange, symbol,        # futures side
+                    exchange, spot_key       # spot side
+                )
+
+                # ↔ vs other exchanges
+                vs_binance = vs_bybit = vs_okx = 'N/A'
+                for other in ("binance", "bybit", "okx"):
+                    if other == exchange:
+                        continue
+                    equiv = self.find_equivalent_symbol(exchange, symbol, other)
+                    if not equiv:
+                        continue
+                    
+                    # Use snapshot instead of direct access to avoid race conditions
+                    other_data = exchange_snapshots.get(other, {}).get(equiv, {})
+                    if "bid" in other_data and "ask" in other_data:
+                        spread = self._calculate_spread(
+                            fut, other_data,
+                            exchange, symbol,
+                            other, equiv
+                        )
+                        if   other == "binance": vs_binance = spread
+                        elif other == "bybit":   vs_bybit   = spread
+                        elif other == "okx":     vs_okx     = spread
+
+                # store results
+                spreads_for_exch[symbol] = {
+                    "vs_spot":    vs_spot,
+                    "vs_binance": vs_binance,
+                    "vs_bybit":   vs_bybit,
+                    "vs_okx":     vs_okx,
+                    "timestamp":  current_time,
+                }
+
+        self.spread_timestamp = current_time
 
     def _calculate_spread(self, price1, price2, exchange1=None, symbol1=None, exchange2=None, symbol2=None):
         """Calculate spread with different staleness thresholds for futures vs spot"""
@@ -664,9 +722,8 @@ class DataStore:
 
     def update_price_direct(self, exchange, symbol, bid, ask, bid_qty=None, ask_qty=None, last=None):
         """Direct price update with minimal overhead"""
-
-
-        with self.exchange_locks[exchange]:  # Exchange-specific lock instead of global
+        
+        with WriteLock(self.exchange_rw_locks[exchange]):  # Exclusive write access
             if symbol not in self.price_data[exchange]:
                 self.price_data[exchange][symbol] = {}
             data = {
@@ -687,7 +744,7 @@ class DataStore:
 
     def get_price_data(self, exchange, symbol):
         """Get price data for a symbol, ensuring fresh data"""
-        with self.exchange_locks[exchange]:  # Exchange-specific lock
+        with self.exchange_rw_locks[exchange]:  # Read lock - allows concurrent access
             return self.price_data[exchange].get(symbol, {}).copy()
 
     def update_funding_rate(self, exchange, symbol, rate):
@@ -701,19 +758,22 @@ class DataStore:
     def clean_old_data(self, max_age=3600):
         current_time = time.time()
         
-        with self.lock:
-            for exchange in self.price_data:
+        # Clean each exchange independently - much better concurrency
+        for exchange in list(self.price_data.keys()):
+            with WriteLock(self.exchange_rw_locks[exchange]):  # Write lock per exchange
                 for symbol in list(self.price_data[exchange].keys()):
                     data = self.price_data[exchange][symbol]
                     if 'timestamp' in data and current_time - data['timestamp'] > max_age:
                         del self.price_data[exchange][symbol]
+
     def check_data_freshness(self):
         """Check if data is fresh and log warnings if not"""
         current_time = time.time()
         stale_threshold = 60  # 60 seconds
         
-        with self.lock:
-            for exchange in self.price_data:
+        # Check each exchange independently - allows concurrent operations
+        for exchange in list(self.price_data.keys()):
+            with self.exchange_rw_locks[exchange]:  # Read lock per exchange
                 stale_count = 0
                 total_count = 0
                 
