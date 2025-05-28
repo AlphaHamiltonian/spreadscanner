@@ -6,7 +6,7 @@ import threading
 import requests
 from collections import deque
 import random
-from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD, DIFFERENCE_THRESHOLD, UPPER_LIMIT, LOWER_LIMIT, DELETE_OLD_TIME, NUMBER_OF_SEC_THRESHOLD
+from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD, DIFFERENCE_THRESHOLD, UPPER_LIMIT, LOWER_LIMIT, DELETE_OLD_TIME, NUMBER_OF_SEC_THRESHOLD, FUNDING_RATE_THRESHOLD
 from source.message import send_message
 import threading
 from threading import RLock
@@ -456,7 +456,7 @@ class DataStore:
         self.lock = threading.RLock()
         self.threshold_timestamps = {}  # Track when thresholds are exceeded for each asset pair
         self.last_notification_time = {}  # Track when the last notification was sent
-
+        self.last_funding_notif_time = {}  # (exchange,symbol) → last-sent epoch
         # Per-symbol lock manager for high-frequency price updates
         self.symbol_locks = SymbolLockManager()
 
@@ -667,7 +667,6 @@ class DataStore:
         
         # Express as percentage
         spread_pct = avg_ratio * 100
-        threshold_pct = 3
         if spread_pct > UPPER_LIMIT or spread_pct < LOWER_LIMIT:
             # Create a unique key for this asset pair
             asset_pair_key = f"{source1}_vs_{source2}"
@@ -814,11 +813,25 @@ class DataStore:
             return self.price_data[exchange].get(symbol, {}).copy()
 
     def update_funding_rate(self, exchange, symbol, rate):
+        now = time.time()
+        key = (exchange, symbol)
         symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
         with WriteLock(symbol_lock):
             if exchange not in self.funding_rates:
                 self.funding_rates[exchange] = {}
             self.funding_rates[exchange][symbol] = rate
+            if abs(rate) >= FUNDING_RATE_THRESHOLD:
+                last_time = self.last_funding_notif_time.get(key, 0)
+                if now - last_time > 1800:   # 30 min
+                    direction = "positive" if rate > 0 else "negative"
+                    pct       = rate * 100
+                    msg = (
+                        f"⚠️ Funding rate alert\n"
+                        f"{exchange}:{symbol} → {pct:.2f}% ({direction})"
+                    )
+                    if send_message(msg):
+                        self.last_funding_notif_time[key] = now
+                        logger.info("Funding alert sent for %s. Next in 30 min.", key)
 
     def get_funding_rate(self, exchange, symbol):
         symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
