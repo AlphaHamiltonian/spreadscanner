@@ -59,6 +59,50 @@ class WriteLock:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.rw_lock.release_write()
 
+class SymbolLockManager:
+    """Thread-safe manager for per-symbol locks with automatic cleanup"""
+    
+    def __init__(self, cleanup_interval=300):  # 5 minutes
+        self._locks = {}  # symbol -> ReaderWriterLock
+        self._lock_access_times = {}  # symbol -> last_access_time
+        self._manager_lock = threading.RLock()
+        self._cleanup_interval = cleanup_interval
+        self._last_cleanup = time.time()
+        
+    def get_lock(self, exchange, symbol):
+        """Get or create a lock for the given exchange:symbol"""
+        lock_key = f"{exchange}:{symbol}"
+        current_time = time.time()
+        
+        with self._manager_lock:
+            # Periodic cleanup of unused locks
+            if current_time - self._last_cleanup > self._cleanup_interval:
+                self._cleanup_unused_locks(current_time)
+                self._last_cleanup = current_time
+            
+            # Update access time
+            self._lock_access_times[lock_key] = current_time
+            
+            # Create lock if it doesn't exist
+            if lock_key not in self._locks:
+                self._locks[lock_key] = ReaderWriterLock()
+                
+            return self._locks[lock_key]
+    
+    def _cleanup_unused_locks(self, current_time, max_idle_time=600):  # 10 minutes
+        """Remove locks that haven't been accessed recently"""
+        keys_to_remove = []
+        
+        for lock_key, last_access in self._lock_access_times.items():
+            if current_time - last_access > max_idle_time:
+                keys_to_remove.append(lock_key)
+        
+        for key in keys_to_remove:
+            self._locks.pop(key, None)
+            self._lock_access_times.pop(key, None)
+            
+        if keys_to_remove:
+            logging.getLogger(__name__).debug(f"Cleaned up {len(keys_to_remove)} unused symbol locks")
 
 TELEGRAM_ENABLED = False  # Set to True to enable Telegram notifications
 TELEGRAM_BOT_TOKEN = "REDACTED_TOKEN"  # Replace with your bot token
@@ -88,6 +132,12 @@ class WebSocketManager:
         self.last_pong_time = time.time()
         self.processor_threads = []
         
+
+    def _start_heartbeat(self):
+        if not self.is_running:
+            return
+        self.maintain_connection()      # send ping / skip for Binance
+        threading.Timer(20, self._start_heartbeat).start()
 
     def disconnect(self):
         """Properly disconnect WebSocket and clean up resources"""
@@ -232,6 +282,7 @@ class WebSocketManager:
             
             # Set last activity time for health monitoring
             self.last_activity = time.time()
+            self._start_heartbeat()
             logger.info(f"Connected {self.name} WebSocket")
             
         except Exception as e:
@@ -399,14 +450,17 @@ class SymbolNormalizer:
         return result
 
 class DataStore:
-    """Centralized data store with thread-safe operations."""
+    """Centralized data store with per-symbol thread-safe operations."""
     def __init__(self):
-        # Keep original global lock for backward compatibility
+        # Keep original global lock for backward compatibility and operations affecting multiple symbols
         self.lock = threading.RLock()
         self.threshold_timestamps = {}  # Track when thresholds are exceeded for each asset pair
         self.last_notification_time = {}  # Track when the last notification was sent
 
-        # Exchange-specific reader-writer locks for better concurrency
+        # Per-symbol lock manager for high-frequency price updates
+        self.symbol_locks = SymbolLockManager()
+
+        # Exchange-specific reader-writer locks for better concurrency (keep for legacy compatibility)
         self.exchange_rw_locks = {
             'binance': ReaderWriterLock(),
             'bybit': ReaderWriterLock(),
@@ -435,11 +489,29 @@ class DataStore:
         self.spreads = {'binance': {}, 'bybit': {}, 'okx': {}}
         self.spread_timestamp = 0
 
-            
     def update_related_prices(self, exchange, future_symbol, future_data, spot_symbol=None, spot_data=None):
-        """Update futures and spot data atomically to ensure consistent spread calculations"""
-        with WriteLock(self.exchange_rw_locks[exchange]):  # Exchange-specific write lock
-            timestamp = time.time()
+        """Update futures and spot data atomically using symbol-level locks"""
+        timestamp = time.time()
+        
+        # Get locks for the symbols we need to update
+        future_lock = self.symbol_locks.get_lock(exchange, future_symbol)
+        spot_lock = self.symbol_locks.get_lock(exchange, spot_symbol) if spot_symbol else None
+        
+        # Always acquire locks in consistent order to prevent deadlock
+        locks_to_acquire = [(future_symbol, future_lock)]
+        if spot_lock and spot_symbol:
+            locks_to_acquire.append((spot_symbol, spot_lock))
+        
+        # Sort by symbol name to ensure consistent lock ordering
+        locks_to_acquire.sort(key=lambda x: x[0])
+        
+        # Acquire all locks
+        acquired_locks = []
+        try:
+            for symbol_name, lock in locks_to_acquire:
+                write_lock = WriteLock(lock)
+                write_lock.__enter__()
+                acquired_locks.append(write_lock)
             
             # Update future price
             if future_symbol not in self.price_data[exchange]:
@@ -454,23 +526,38 @@ class DataStore:
                 self.price_data[exchange][spot_symbol].update(spot_data)
                 self.price_data[exchange][spot_symbol]['timestamp'] = timestamp
                 
-            self.update_counters[exchange] += 1
+            # Only update counter once after all updates
+            with self.exchange_locks[exchange]:
+                self.update_counters[exchange] += 1
+                
+        finally:
+            # Release all locks in reverse order
+            for write_lock in reversed(acquired_locks):
+                write_lock.__exit__(None, None, None)
 
     def calculate_all_spreads(self):
-        """Pre-calculate spreads using reader-writer locks for better concurrency.
-        
-        Multiple spread calculations can run simultaneously, but price updates
-        are exclusive.
-        """
+        """Pre-calculate spreads using per-symbol locks for better concurrency"""
         current_time = time.time()
 
-        # ── 1️⃣  snapshot ALL exchange order books (read locks - concurrent) ─────────
+        # Take snapshots of all symbols from all exchanges
         exchange_snapshots = {}
+        
         for exchange in list(self.price_data.keys()):
-            with self.exchange_rw_locks[exchange]:  # Takes read lock
-                exchange_snapshots[exchange] = self.price_data[exchange].copy()
+            exchange_snapshots[exchange] = {}
+            
+            # Get list of symbols for this exchange
+            with self.exchange_locks[exchange]:
+                symbols_to_process = list(self.price_data[exchange].keys())
+            
+            # Take snapshot of each symbol individually
+            for symbol in symbols_to_process:
+                symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
+                with symbol_lock:  # Read lock
+                    symbol_data = self.price_data[exchange].get(symbol, {})
+                    if symbol_data:
+                        exchange_snapshots[exchange][symbol] = symbol_data.copy()
 
-        # ── 2️⃣  compute spreads on the snapshots (no locks) ─────────
+        # Compute spreads on the snapshots (no locks needed)
         for exchange in exchange_snapshots:
             local_book = exchange_snapshots[exchange]
             spreads_for_exch = self.spreads.setdefault(exchange, {})
@@ -649,6 +736,7 @@ class DataStore:
                     self.last_notification_time[asset_pair_key] = current_time
                     logger.info(f"Notification sent for {asset_pair_key}. Next notification in 30 minutes.")
         return spread_pct
+
     def get_spread(self, exchange, symbol, spread_type='vs_spot'):
         """Get pre-calculated spread value"""
         try:
@@ -657,7 +745,7 @@ class DataStore:
             symbol_dict = spreads_dict.get(symbol, {})
             value = symbol_dict.get(spread_type, 'N/A')
             
-            # Only lock if we need to access more deeply
+            # Only lock if we need to access more deeply and use the new read lock
             if value == 'N/A' and exchange in self.exchange_locks:
                 with self.exchange_locks[exchange]:
                     value = self.spreads.get(exchange, {}).get(symbol, {}).get(spread_type, 'N/A')
@@ -667,7 +755,7 @@ class DataStore:
             return 'N/A'
 
     def get_symbols(self, exchange):
-        with self.exchange_rw_locks[exchange]:  # Read lock for specific exchange
+        with self.exchange_locks[exchange]:  # Read lock for specific exchange
             return self.symbols[exchange].copy()
 
     def update_symbol_maps(self):
@@ -688,6 +776,7 @@ class DataStore:
                     
             # Clear and rebuild equivalent symbol cache
             self.equivalent_symbols = {}
+
     def normalize_symbol(self, exchange, symbol):
         """Get normalized symbol with caching"""
         cache_key = f"{exchange}:{symbol}"
@@ -723,11 +812,13 @@ class DataStore:
         return None
 
     def update_price_direct(self, exchange, symbol, bid, ask, bid_qty=None, ask_qty=None, last=None):
-        """Direct price update with minimal overhead"""
+        """Direct price update with per-symbol locking for maximum concurrency"""
+        symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
         
-        with WriteLock(self.exchange_rw_locks[exchange]):  # Exclusive write access
+        with WriteLock(symbol_lock):
             if symbol not in self.price_data[exchange]:
                 self.price_data[exchange][symbol] = {}
+            
             data = {
                 'bid': bid,
                 'ask': ask,
@@ -742,31 +833,46 @@ class DataStore:
                 data['last'] = last
                 
             self.price_data[exchange][symbol].update(data)
+        
+        # Update counter separately to minimize lock contention
+        with self.exchange_locks[exchange]:
             self.update_counters[exchange] += 1
 
     def get_price_data(self, exchange, symbol):
-        """Get price data for a symbol, ensuring fresh data"""
-        with self.exchange_rw_locks[exchange]:  # Read lock - allows concurrent access
+        """Get price data for a symbol using per-symbol lock"""
+        symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
+        with symbol_lock:  # Read lock
             return self.price_data[exchange].get(symbol, {}).copy()
 
     def update_funding_rate(self, exchange, symbol, rate):
-        with WriteLock(self.exchange_rw_locks[exchange]):  # Write lock for specific exchange
+        symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
+        with WriteLock(symbol_lock):
+            if exchange not in self.funding_rates:
+                self.funding_rates[exchange] = {}
             self.funding_rates[exchange][symbol] = rate
 
     def get_funding_rate(self, exchange, symbol):
-        with self.exchange_rw_locks[exchange]:  # Read lock for specific exchange
+        symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
+        with symbol_lock:  # Read lock
             return self.funding_rates[exchange].get(symbol, "N/A")
 
     def clean_old_data(self, max_age=3600):
+        """Clean old data using per-symbol locks"""
         current_time = time.time()
         
-        # Clean each exchange independently - much better concurrency
         for exchange in list(self.price_data.keys()):
-            with WriteLock(self.exchange_rw_locks[exchange]):  # Write lock per exchange
-                for symbol in list(self.price_data[exchange].keys()):
-                    data = self.price_data[exchange][symbol]
-                    if 'timestamp' in data and current_time - data['timestamp'] > max_age:
-                        del self.price_data[exchange][symbol]
+            # Get list of symbols first
+            with self.exchange_locks[exchange]:
+                symbols_to_check = list(self.price_data[exchange].keys())
+            
+            # Process each symbol individually
+            for symbol in symbols_to_check:
+                symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
+                with WriteLock(symbol_lock):
+                    if symbol in self.price_data[exchange]:
+                        data = self.price_data[exchange][symbol]
+                        if 'timestamp' in data and current_time - data['timestamp'] > max_age:
+                            del self.price_data[exchange][symbol]
 
     def check_data_freshness(self):
         """Check if data is fresh and log warnings if not"""
@@ -775,18 +881,26 @@ class DataStore:
         
         # Check each exchange independently - allows concurrent operations
         for exchange in list(self.price_data.keys()):
-            with self.exchange_rw_locks[exchange]:  # Read lock per exchange
-                stale_count = 0
-                total_count = 0
-                
-                for symbol, data in self.price_data[exchange].items():
-                    if 'timestamp' in data:
-                        total_count += 1
-                        if current_time - data['timestamp'] > stale_threshold:
-                            stale_count += 1
-                            
-                if total_count > 0 and stale_count > 0.1 * total_count:  # More than 10% stale
-                    logger.warning(f"Data freshness issue: {exchange} has {stale_count}/{total_count} stale symbols")
+            # Take snapshot of symbols to check
+            with self.exchange_locks[exchange]:
+                symbols_to_check = list(self.price_data[exchange].keys())
+            
+            stale_count = 0
+            total_count = 0
+            
+            # Check each symbol individually
+            for symbol in symbols_to_check:
+                symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
+                with symbol_lock:  # Read lock
+                    if symbol in self.price_data[exchange]:
+                        data = self.price_data[exchange][symbol]
+                        if 'timestamp' in data:
+                            total_count += 1
+                            if current_time - data['timestamp'] > stale_threshold:
+                                stale_count += 1
+                                
+            if total_count > 0 and stale_count > 0.1 * total_count:
+                logger.warning(f"Data freshness issue: {exchange} has {stale_count}/{total_count} stale symbols")
 
 # Create global data store
 data_store = DataStore()
