@@ -698,8 +698,8 @@ class DataStore:
                     notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% above upper limit ({UPPER_LIMIT}%)"
                 else:  # spread_pct < LOWER_LIMIT
                     notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% below lower limit ({LOWER_LIMIT}%)"
-                                # Play system bell sound
-                success = send_message(notification_message)
+                if exchange1==exchange2 and exchange1 == "binance":
+                    success = send_message(notification_message)
                 if success:
                     self.last_notification_time[asset_pair_key] = current_time
                     logger.info(f"Notification sent for {asset_pair_key}. Next notification in 30 minutes.")
