@@ -3,7 +3,7 @@ import requests
 # --------------------------------------------------------------------------- #
 # Configuration – kept identical to your existing variable names
 # --------------------------------------------------------------------------- #
-TELEGRAM_ENABLED = False  # Set to True to enable Telegram notifications
+TELEGRAM_ENABLED = True  # Set to True to enable Telegram notifications
 TELEGRAM_BOT_TOKEN = "REDACTED_TOKEN"  # Replace with your bot token
 TELEGRAM_CHAT_ID = "REDACTED_CHAT_ID"  # Replace with your group chat ID
 
