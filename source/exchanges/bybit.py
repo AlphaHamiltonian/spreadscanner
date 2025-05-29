@@ -21,6 +21,13 @@ class BybitConnector(BaseExchangeConnector):
         self.symbol_last_update = {}
         self.correction_history = {}
         
+        # Timer and reconnection management
+        self._health_timer_active = False
+        self._freshness_timer_active = False
+        self._reconnection_lock = threading.Lock()
+        self._last_reconnect_time = 0
+        self._reconnect_cooldown = 15  # seconds
+        
         # Add initialization for spot tracking attributes
         self.spot_active_symbols = set()
         self.spot_last_data_time = time.time()
@@ -29,6 +36,80 @@ class BybitConnector(BaseExchangeConnector):
         self.spot_connection_time = time.time()
         self.spot_subscribed_count = 0
         self.spot_subscription_batches = []
+
+    # Timer management methods
+    def _schedule_health_check(self):
+        """Prevent multiple overlapping health check timers"""
+        if self._health_timer_active:
+            return  # Already scheduled
+        self._health_timer_active = True
+        threading.Timer(30.0, self._health_check_wrapper).start()
+
+    def _health_check_wrapper(self):
+        """Wrapper to reset timer flag after health check"""
+        try:
+            self.monitor_symbol_health()
+        except Exception as e:
+            logger.error(f"Error in health check: {e}")
+        finally:
+            self._health_timer_active = False
+
+    def _schedule_freshness_check(self):
+        """Prevent multiple overlapping freshness check timers"""
+        if self._freshness_timer_active:
+            return  # Already scheduled
+        self._freshness_timer_active = True
+        threading.Timer(15.0, self._freshness_check_wrapper).start()
+
+    def _freshness_check_wrapper(self):
+        """Wrapper to reset timer flag after freshness check"""
+        try:
+            self.check_data_freshness()
+        except Exception as e:
+            logger.error(f"Error in freshness check: {e}")
+        finally:
+            self._freshness_timer_active = False
+
+    def _safe_reconnect(self, connection_type="linear"):
+        """Thread-safe reconnection with cooldown to prevent race conditions"""
+        current_time = time.time()
+        
+        # Check cooldown period
+        if current_time - self._last_reconnect_time < self._reconnect_cooldown:
+            logger.debug(f"Bybit {connection_type} reconnection on cooldown")
+            return False
+            
+        # Try to acquire lock (non-blocking)
+        if not self._reconnection_lock.acquire(blocking=False):
+            logger.debug(f"Bybit {connection_type} reconnection already in progress")
+            return False
+            
+        try:
+            logger.info(f"Starting safe Bybit {connection_type} reconnection")
+            self._last_reconnect_time = current_time
+            
+            if connection_type == "linear":
+                if "bybit_linear_ws" in self.websocket_managers:
+                    manager = self.websocket_managers["bybit_linear_ws"]
+                    if hasattr(manager, 'disconnect') and hasattr(manager, 'connect'):
+                        manager.disconnect()
+                        time.sleep(1)
+                        manager.connect()
+            elif connection_type == "spot":
+                if "bybit_spot_ws" in self.websocket_managers:
+                    manager = self.websocket_managers["bybit_spot_ws"]
+                    if hasattr(manager, 'disconnect') and hasattr(manager, 'connect'):
+                        manager.disconnect()
+                        time.sleep(1)
+                        manager.connect()
+                        
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error in safe Bybit {connection_type} reconnection: {e}")
+            return False
+        finally:
+            self._reconnection_lock.release()
 
     def fetch_spot_symbols(self):
         """Fetch spot market information and map it to corresponding futures"""
@@ -97,61 +178,6 @@ class BybitConnector(BaseExchangeConnector):
                 logger.error(f"Error fetching Bybit spot symbols: {response.status_code}")
         except Exception as e:
             logger.error(f"Error in Bybit spot mapping: {e}")
-
-    def reinitialize_linear_websocket(self):
-        """Completely reinitialize the linear WebSocket connection"""
-        try:
-            logger.info("Reinitializing Bybit linear WebSocket from scratch")
-            
-            # Close existing connection if any
-            if "bybit_linear_ws" in self.websocket_managers:
-                try:
-                    old_manager = self.websocket_managers["bybit_linear_ws"]
-                    old_manager.disconnect()
-                except Exception as e:
-                    logger.error(f"Error closing old Bybit linear WebSocket: {e}")
-                # Remove from managers dictionary
-                del self.websocket_managers["bybit_linear_ws"]
-                
-            # Wait for resources to be released
-            time.sleep(2)
-            
-            # Fetch latest symbols again to ensure freshness
-            self.fetch_symbols()
-            symbols_list = [s for s in data_store.get_symbols('bybit') if s.endswith('USDT')]
-            if not symbols_list:
-                logger.warning("No Bybit symbols found during reinitialization")
-                return
-                
-            # Connect with fresh WebSocket
-            category = "linear"
-            ws_url = f"wss://stream.bybit.com/v5/public/{category}"
-            
-            # Create with existing handlers but fresh connection
-            manager = WebSocketManager(
-                url=ws_url,
-                name="bybit_linear_ws",
-                on_message=self._create_linear_message_handler(),
-                on_open=self._create_linear_open_handler(symbols_list[:200]),  # Subscribe to fewer symbols initially
-                ping_interval=15,
-                ping_timeout=5,
-                retry_count=20
-            )
-            
-            # Store and connect
-            self.websocket_managers["bybit_linear_ws"] = manager
-            manager.connect()
-            
-            # Schedule subscription of remaining symbols
-            def subscribe_remaining():
-                if len(symbols_list) > 200:
-                    remaining = symbols_list[200:]
-                    logger.info(f"Scheduling subscription for remaining {len(remaining)} Bybit symbols")
-                    self._batch_subscribe_symbols(manager.ws, "linear", remaining)
-            threading.Timer(60.0, subscribe_remaining).start()
-            
-        except Exception as e:
-            logger.error(f"Error reinitializing Bybit linear WebSocket: {e}")
 
     def create_reverse_mapping(self):
         """Create a reverse mapping from futures to spot"""
@@ -290,7 +316,7 @@ class BybitConnector(BaseExchangeConnector):
                     return
                     
                 manager = self.websocket_managers["bybit_spot_ws"]
-                if not hasattr(manager, 'ws') or not manager.ws:
+                if not hasattr(manager, 'ws') or not manager['ws']:
                     return
                     
                 # Send ping
@@ -330,7 +356,7 @@ class BybitConnector(BaseExchangeConnector):
                     # Get current batch
                     batch = batches[batch_idx]
                     
-                    # CHANGE HERE: Use orderbook.1.SYMBOL format instead of tickers.SYMBOL
+                    # Use orderbook.1.SYMBOL format
                     args = [f"orderbook.1.{symbol}" for symbol in batch]
                     
                     # Send subscription message
@@ -540,12 +566,11 @@ class BybitConnector(BaseExchangeConnector):
             self.websocket_managers["bybit_linear_ws"] = manager
             manager.connect()
             
-            # Start symbol health monitoring
-            
+            # Start symbol health monitoring with safe scheduling
+            self._schedule_freshness_check()
             
         except Exception as e:
             logger.error(f"Error setting up Bybit WebSocket: {e}")
-        threading.Timer(30.0, self.check_data_freshness).start()
 
     def _record_symbol_update(self, category, symbol):
         """Record the timestamp of the latest update for a symbol"""
@@ -574,7 +599,6 @@ class BybitConnector(BaseExchangeConnector):
         
         logger.info(f"Prepared {total_batches} subscription batches for {len(symbols)} Bybit {category} symbols")
         
-        # Rest of your existing code...
         # Track subscription progress
         self.subscription_progress = {
             'total': len(symbols),
@@ -689,22 +713,14 @@ class BybitConnector(BaseExchangeConnector):
             # If no recent updates, force reconnection
             if last_update_time > 0 and current_time - last_update_time > 20:
                 logger.warning(f"No Bybit updates for {current_time - last_update_time:.1f}s, forcing reconnection")
-                
-                # Force reconnection of linear WebSocket
-                if "bybit_linear_ws" in self.websocket_managers:
-                    manager = self.websocket_managers["bybit_linear_ws"]
-                    if hasattr(manager, 'disconnect') and hasattr(manager, 'connect'):
-                        manager.disconnect()
-                        time.sleep(1)
-                        manager.connect()
-                        logger.info("Forced Bybit linear WebSocket reconnection")
+                self._safe_reconnect("linear")
             
         except Exception as e:
             logger.error(f"Error checking Bybit data freshness: {e}")
             
-        # Schedule next check
+        # Schedule next check with safe method
         if not stop_event.is_set():
-            threading.Timer(15.0, self.check_data_freshness).start()  # Check every 15 seconds
+            self._schedule_freshness_check()
 
     def monitor_symbol_health(self):
         """Unified health monitor for both futures and spot with selective resubscription"""
@@ -747,13 +763,7 @@ class BybitConnector(BaseExchangeConnector):
                 # If no updates in the last 30 seconds, force reconnection
                 if most_recent_update > 0 and current_time - most_recent_update > 30:
                     logger.warning(f"No Bybit futures updates received for {current_time - most_recent_update:.1f}s, forcing reconnection")
-                    if "bybit_linear_ws" in self.websocket_managers:
-                        manager = self.websocket_managers["bybit_linear_ws"]
-                        if hasattr(manager, 'disconnect') and hasattr(manager, 'connect'):
-                            manager.disconnect()
-                            time.sleep(1)
-                            manager.connect()
-                            self.futures_connection_time = current_time
+                    self._safe_reconnect("linear")
 
             # PART 2: SPOT MONITORING
             spot_stale_symbols = []
@@ -786,32 +796,19 @@ class BybitConnector(BaseExchangeConnector):
             logger.info(f"Bybit spot health: {len(spot_active_symbols)}/{len(expected_spot_symbols)} active symbols ({spot_coverage_pct:.1f}%)")
             logger.info(f"Bybit spot data freshness: {spot_total - len(spot_stale_symbols)}/{spot_total} fresh ({100 - spot_stale_percent:.1f}%)")
             
-
-            # PART 4: DATA AGE CHECKS
             # Check spot data age
             spot_data_age = current_time - getattr(self, 'spot_last_data_time', current_time)
             if spot_data_age > 120:  # No data for 2 minutes
                 logger.warning(f"No Bybit spot data for {spot_data_age:.1f}s, reconnecting")
-                if "bybit_spot_ws" in self.websocket_managers:
-                    manager = self.websocket_managers["bybit_spot_ws"]
-                    if hasattr(manager, 'disconnect') and hasattr(manager, 'connect'):
-                        manager.disconnect()
-                        time.sleep(1)
-                        manager.connect()
-                    return
+                self._safe_reconnect("spot")
                     
-            # PART 5: ACTION DECISION LOGIC
+            # ACTION DECISION LOGIC
             # FUTURES ACTION:
             if futures_stale_symbols:
                 # If many stale symbols (>50%), do a full reconnect
                 if len(futures_stale_symbols) > futures_total * 0.5:
                     logger.warning(f"Too many stale futures symbols ({len(futures_stale_symbols)}/{futures_total}), performing full reconnect")
-                    if "bybit_linear_ws" in self.websocket_managers:
-                        manager = self.websocket_managers["bybit_linear_ws"]
-                        if hasattr(manager, 'disconnect') and hasattr(manager, 'connect'):
-                            manager.disconnect()
-                            time.sleep(1)
-                            manager.connect()
+                    self._safe_reconnect("linear")
                 # If severe issues (>70%), reinitialize completely
                 elif len(futures_stale_symbols) > futures_total * 0.7:
                     logger.warning(f"Severe staleness in futures symbols ({len(futures_stale_symbols)}/{futures_total}), reinitializing")
@@ -825,12 +822,7 @@ class BybitConnector(BaseExchangeConnector):
                 # If many stale symbols (>50%), do a full reconnect
                 if len(spot_stale_symbols) > spot_total * 0.5:
                     logger.warning(f"Too many stale spot symbols ({len(spot_stale_symbols)}/{spot_total}), performing full reconnect")
-                    if "bybit_spot_ws" in self.websocket_managers:
-                        manager = self.websocket_managers["bybit_spot_ws"]
-                        if hasattr(manager, 'disconnect') and hasattr(manager, 'connect'):
-                            manager.disconnect()
-                            time.sleep(1)
-                            manager.connect()
+                    self._safe_reconnect("spot")
                 # Otherwise, just resubscribe to stale symbols
                 else:
                     self.resubscribe_stale_symbols(spot_stale_symbols, "spot")
@@ -838,9 +830,64 @@ class BybitConnector(BaseExchangeConnector):
         except Exception as e:
             logger.error(f"Error in Bybit symbol health monitor: {e}")
             
-        # Schedule next check
+        # Schedule next check with safe method
         if not stop_event.is_set():
-            threading.Timer(30.0, self.monitor_symbol_health).start()
+            self._schedule_health_check()
+
+    def reinitialize_linear_websocket(self):
+        """Completely reinitialize the linear WebSocket connection"""
+        try:
+            logger.info("Reinitializing Bybit linear WebSocket from scratch")
+            
+            # Close existing connection if any
+            if "bybit_linear_ws" in self.websocket_managers:
+                try:
+                    old_manager = self.websocket_managers["bybit_linear_ws"]
+                    old_manager.disconnect()
+                except Exception as e:
+                    logger.error(f"Error closing old Bybit linear WebSocket: {e}")
+                # Remove from managers dictionary
+                del self.websocket_managers["bybit_linear_ws"]
+                
+            # Wait for resources to be released
+            time.sleep(2)
+            
+            # Fetch latest symbols again to ensure freshness
+            self.fetch_symbols()
+            symbols_list = [s for s in data_store.get_symbols('bybit') if s.endswith('USDT')]
+            if not symbols_list:
+                logger.warning("No Bybit symbols found during reinitialization")
+                return
+                
+            # Connect with fresh WebSocket
+            category = "linear"
+            ws_url = f"wss://stream.bybit.com/v5/public/{category}"
+            
+            # Create with existing handlers but fresh connection
+            manager = WebSocketManager(
+                url=ws_url,
+                name="bybit_linear_ws",
+                on_message=self._create_linear_message_handler(),
+                on_open=self._create_linear_open_handler(symbols_list[:200]),  # Subscribe to fewer symbols initially
+                ping_interval=15,
+                ping_timeout=5,
+                retry_count=20
+            )
+            
+            # Store and connect
+            self.websocket_managers["bybit_linear_ws"] = manager
+            manager.connect()
+            
+            # Schedule subscription of remaining symbols
+            def subscribe_remaining():
+                if len(symbols_list) > 200:
+                    remaining = symbols_list[200:]
+                    logger.info(f"Scheduling subscription for remaining {len(remaining)} Bybit symbols")
+                    self._batch_subscribe_symbols(manager.ws, "linear", remaining)
+            threading.Timer(60.0, subscribe_remaining).start()
+            
+        except Exception as e:
+            logger.error(f"Error reinitializing Bybit linear WebSocket: {e}")
 
     def resubscribe_stale_symbols(self, symbols, symbol_type="futures"):
         """Resubscribe only to stale symbols"""
@@ -877,8 +924,7 @@ class BybitConnector(BaseExchangeConnector):
         else:  # spot or other categories
             batch_size = 10  # Smaller batch size for spot
 
-        # Process symbols in small batches (10 per batch)
-        #batch_size = 10
+        # Process symbols in small batches
         batches = [symbols[i:i+batch_size] for i in range(0, len(symbols), batch_size)]
         
         # Function to send a batch
@@ -911,11 +957,7 @@ class BybitConnector(BaseExchangeConnector):
                 # If sending fails, try reconnection
                 if ws_name in self.websocket_managers:
                     logger.warning(f"Subscription failed for {symbol_type}, attempting reconnection")
-                    manager = self.websocket_managers[ws_name]
-                    if hasattr(manager, 'disconnect') and hasattr(manager, 'connect'):
-                        manager.disconnect()
-                        time.sleep(1)
-                        manager.connect()
+                    self._safe_reconnect(symbol_type.replace("futures", "linear"))
                         
         # Start sending batches
         send_batch(0)
@@ -1142,8 +1184,8 @@ class BybitConnector(BaseExchangeConnector):
             # 5. Connect to spot WebSocket with all symbols
             self.connect_spot_websocket()
             
-            # 6. Start health monitoring
-            threading.Timer(30, self.monitor_symbol_health).start()
+            # 6. Start health monitoring with safe scheduling
+            self._schedule_health_check()
 
             threading.Thread(
                 target=self.update_funding_rates,

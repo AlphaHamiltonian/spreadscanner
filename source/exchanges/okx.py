@@ -19,10 +19,92 @@ class OkxConnector(BaseExchangeConnector):
         self.reconnect_attempts = 0
         self.correction_history = {}
         
+        # Timer and reconnection management
+        self._health_timer_active = False
+        self._spot_health_timer_active = False
+        self._reconnection_lock = threading.Lock()
+        self._last_reconnect_time = 0
+        self._reconnect_cooldown = 12  # seconds - OKX can be rate limit sensitive
+        
         # Initialize state tracking attributes
         self.okx_connection_time = time.time()
         self.okx_last_data_time = time.time()
         self.okx_active_symbols = set()
+
+    # Timer management methods
+    def _schedule_health_check(self):
+        """Prevent multiple overlapping health check timers"""
+        if self._health_timer_active:
+            return  # Already scheduled
+        self._health_timer_active = True
+        threading.Timer(60, self._health_check_wrapper).start()
+
+    def _health_check_wrapper(self):
+        """Wrapper to reset timer flag after health check"""
+        try:
+            self._monitor_okx_health()
+        except Exception as e:
+            logger.error(f"Error in OKX health check: {e}")
+        finally:
+            self._health_timer_active = False
+
+    def _schedule_spot_health_check(self):
+        """Prevent multiple overlapping spot health check timers"""
+        if self._spot_health_timer_active:
+            return  # Already scheduled
+        self._spot_health_timer_active = True
+        threading.Timer(45, self._spot_health_check_wrapper).start()
+
+    def _spot_health_check_wrapper(self):
+        """Wrapper to reset spot timer flag after health check"""
+        try:
+            # This would call spot-specific health check if we had one
+            pass
+        except Exception as e:
+            logger.error(f"Error in OKX spot health check: {e}")
+        finally:
+            self._spot_health_timer_active = False
+
+    def _safe_reconnect(self, connection_type="futures"):
+        """Thread-safe reconnection with cooldown to prevent race conditions"""
+        current_time = time.time()
+        
+        # Check cooldown period
+        if current_time - self._last_reconnect_time < self._reconnect_cooldown:
+            logger.debug(f"OKX {connection_type} reconnection on cooldown")
+            return False
+            
+        # Try to acquire lock (non-blocking)
+        if not self._reconnection_lock.acquire(blocking=False):
+            logger.debug(f"OKX {connection_type} reconnection already in progress")
+            return False
+            
+        try:
+            logger.info(f"Starting safe OKX {connection_type} reconnection")
+            self._last_reconnect_time = current_time
+            
+            if connection_type == "futures":
+                if "okx_futures_ws" in self.websocket_managers:
+                    manager = self.websocket_managers["okx_futures_ws"]
+                    if hasattr(manager, 'disconnect') and hasattr(manager, 'connect'):
+                        manager.disconnect()
+                        time.sleep(1)
+                        manager.connect()
+            elif connection_type == "spot":
+                if "okx_spot_ws" in self.websocket_managers:
+                    manager = self.websocket_managers["okx_spot_ws"]
+                    if hasattr(manager, 'disconnect') and hasattr(manager, 'connect'):
+                        manager.disconnect()
+                        time.sleep(1)
+                        manager.connect()
+                        
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error in safe OKX {connection_type} reconnection: {e}")
+            return False
+        finally:
+            self._reconnection_lock.release()
 
     def connect_websocket(self):
         """Connect to OKX WebSocket with optimized connection management"""
@@ -88,106 +170,117 @@ class OkxConnector(BaseExchangeConnector):
             # Subscribe to symbols in batches
             self._batch_subscribe_okx_symbols(ws, symbols_list)
             
-            # Start heartbeat timer
-            def send_heartbeat():
-                if not manager.is_running or stop_event.is_set():
-                    return
-                    
-                try:
-                    # Check if socket is valid
-                    if not ws or not hasattr(ws, 'sock') or not ws.sock or not hasattr(ws.sock, 'connected'):
-                        logger.warning("OKX WebSocket disconnected, cannot send heartbeat")
-                        return
-                        
-                    if not ws.sock.connected:
-                        logger.warning("OKX WebSocket connection lost, cannot send heartbeat")
-                        return
-                        
-                    # Send ping in OKX format
-                    ws.send(json.dumps({"event": "ping"}))
-                    logger.debug("Sent heartbeat to OKX")
-                    
-                    # Check data freshness
-                    current_time = time.time()
-                    if current_time - self.okx_last_data_time > 60:
-                        logger.warning(f"No OKX data for {current_time - self.okx_last_data_time:.1f}s, reconnecting")
-                        manager.disconnect()
-                        time.sleep(1)
-                        manager.connect()
-                        return
-                except Exception as e:
-                    logger.error(f"Error sending heartbeat to OKX: {e}")
-                    
-                # Schedule next heartbeat if still running
-                if manager.is_running and not stop_event.is_set():
-                    threading.Timer(20.0, send_heartbeat).start()
-                    
-            # Start the heartbeat timer
-            threading.Timer(20.0, send_heartbeat).start()
+            # Start heartbeat timer with safe scheduling
+            self._schedule_heartbeat()
             
+        def on_error(ws, error):
+            logger.error(f"OKX WebSocket error: {error}")
+            
+        def on_close(ws, close_status_code, close_msg):
+            logger.warning(f"OKX WebSocket closed: {close_status_code} - {close_msg}")
+            # Use safe reconnection
+            if not stop_event.is_set():
+                self._safe_reconnect("futures")
+        
         # Create WebSocket manager configured for OKX performance
         manager = WebSocketManager(
             url=ws_url,
             name="okx_futures_ws",
             on_message=on_message,
             on_open=on_open,
+            on_error=on_error,
+            on_close=on_close,
             ping_interval=15,
             ping_timeout=10
         )
-        
         
         # Store and connect
         self.websocket_managers["okx_futures_ws"] = manager
         manager.connect()
         
-        # Start health monitoring specific to OKX
-        def monitor_okx_health():
-            if stop_event.is_set() or not manager.is_running:
+        # Start health monitoring with safe scheduling
+        self._schedule_health_check()
+
+    def _schedule_heartbeat(self):
+        """Schedule heartbeat with safe timer management"""
+        def send_heartbeat():
+            if not stop_event.is_set() and "okx_futures_ws" in self.websocket_managers:
+                try:
+                    manager = self.websocket_managers["okx_futures_ws"]
+                    
+                    # Check if socket is valid
+                    if not manager or not hasattr(manager, 'ws') or not manager.ws:
+                        logger.warning("OKX WebSocket manager invalid, cannot send heartbeat")
+                        return
+                        
+                    if not hasattr(manager.ws, 'sock') or not manager.ws.sock:
+                        logger.warning("OKX WebSocket disconnected, cannot send heartbeat")
+                        return
+                        
+                    if not hasattr(manager.ws.sock, 'connected') or not manager.ws.sock.connected:
+                        logger.warning("OKX WebSocket connection lost, cannot send heartbeat")
+                        return
+                        
+                    # Send ping in OKX format
+                    manager.ws.send(json.dumps({"event": "ping"}))
+                    logger.debug("Sent heartbeat to OKX")
+                    
+                    # Check data freshness
+                    current_time = time.time()
+                    if current_time - self.okx_last_data_time > 60:
+                        logger.warning(f"No OKX data for {current_time - self.okx_last_data_time:.1f}s, reconnecting")
+                        self._safe_reconnect("futures")
+                        return
+                        
+                except Exception as e:
+                    logger.error(f"Error sending heartbeat to OKX: {e}")
+                    
+                # Schedule next heartbeat
+                threading.Timer(20.0, send_heartbeat).start()
+                    
+        # Start the heartbeat timer
+        threading.Timer(20.0, send_heartbeat).start()
+
+    def _monitor_okx_health(self):
+        """Centralized OKX health monitoring"""
+        if stop_event.is_set():
+            return
+            
+        try:
+            current_time = time.time()
+            
+            # Check connection age (force periodic reconnect)
+            connection_age = current_time - self.okx_connection_time
+            if connection_age > 3600:  # 1 hour
+                logger.info(f"Performing scheduled OKX reconnection after {connection_age:.1f}s")
+                self._safe_reconnect("futures")
                 return
                 
-            try:
-                current_time = time.time()
+            # Check for recent data
+            data_age = current_time - self.okx_last_data_time
+            if data_age > 90:  # No data for 90 seconds
+                logger.warning(f"No OKX data for {data_age:.1f}s, reconnecting")
+                self._safe_reconnect("futures")
+                return
                 
-                # Check connection age (force periodic reconnect)
-                connection_age = current_time - self.okx_connection_time
-                if connection_age > 3600:  # 1 hour
-                    logger.info(f"Performing scheduled OKX reconnection after {connection_age:.1f}s")
-                    manager.disconnect()
-                    time.sleep(1)
-                    manager.connect()
+            # Check active symbols vs expected
+            expected_symbols = set(data_store.get_symbols('okx'))
+            if len(expected_symbols) > 10:
+                coverage_pct = (len(self.okx_active_symbols) / len(expected_symbols)) * 100
+                logger.info(f"OKX connection health: {len(self.okx_active_symbols)}/{len(expected_symbols)} active symbols ({coverage_pct:.1f}%)")
+                
+                # Force reconnect if active symbols coverage is too low
+                if coverage_pct < 50:
+                    logger.warning(f"Poor OKX symbol coverage: only {coverage_pct:.1f}% of symbols active, reconnecting")
+                    self._safe_reconnect("futures")
                     return
                     
-                # Check for recent data
-                data_age = current_time - self.okx_last_data_time
-                if data_age > 90:  # No data for 90 seconds
-                    logger.warning(f"No OKX data for {data_age:.1f}s, reconnecting")
-                    manager.disconnect()
-                    time.sleep(1)
-                    manager.connect()
-                    return
-                    
-                # Check active symbols vs expected
-                expected_symbols = set(symbols_list)
-                if len(expected_symbols) > 10:
-                    coverage_pct = (len(self.okx_active_symbols) / len(expected_symbols)) * 100
-                    logger.info(f"OKX connection health: {len(self.okx_active_symbols)}/{len(expected_symbols)} active symbols ({coverage_pct:.1f}%)")
-                    
-                    # Force reconnect if active symbols coverage is too low
-                    if coverage_pct < 50:
-                        logger.warning(f"Poor OKX symbol coverage: only {coverage_pct:.1f}% of symbols active, reconnecting")
-                        manager.disconnect()
-                        time.sleep(1)
-                        manager.connect()
-                        return
-            except Exception as e:
-                logger.error(f"Error in OKX health monitor: {e}")
-                
-            # Schedule next check
-            if not stop_event.is_set() and manager.is_running:
-                threading.Timer(60, monitor_okx_health).start()
-                
-        # Start health monitoring
-        threading.Timer(60, monitor_okx_health).start()
+        except Exception as e:
+            logger.error(f"Error in OKX health monitor: {e}")
+            
+        # Schedule next check with safe method
+        if not stop_event.is_set():
+            self._schedule_health_check()
 
     def validate_price(self, price, symbol, side, previous_prices=None):
         """
@@ -417,12 +510,23 @@ class OkxConnector(BaseExchangeConnector):
             
             logger.info(f"Sending OKX spot subscription for {len(major_pairs)} symbols")
             ws.send(subscribe_msg)
+
+        def on_error(ws, error):
+            logger.error(f"OKX spot WebSocket error: {error}")
+            
+        def on_close(ws, close_status_code, close_msg):
+            logger.warning(f"OKX spot WebSocket closed: {close_status_code} - {close_msg}")
+            # Use safe reconnection
+            if not stop_event.is_set():
+                self._safe_reconnect("spot")
             
         manager = WebSocketManager(
             url=ws_url,
             name="okx_spot_ws",
             on_message=on_message,
             on_open=on_open,
+            on_error=on_error,
+            on_close=on_close,
             ping_interval=15,
             ping_timeout=10
         )
@@ -486,9 +590,20 @@ class OkxConnector(BaseExchangeConnector):
             })
             
             logger.info(f"Sending OKX subscription batch {batch_idx+1}/{total_batches} ({len(batch)} symbols)")
-            ws.send(subscribe_msg)
             
-            # Schedule the next batch with a longer delay (4 seconds instead of 2)
+            try:
+                # Check WebSocket is valid before sending
+                if (ws and hasattr(ws, 'sock') and ws.sock and 
+                    hasattr(ws.sock, 'connected') and ws.sock.connected):
+                    ws.send(subscribe_msg)
+                else:
+                    logger.warning(f"OKX WebSocket not valid for batch {batch_idx+1}")
+                    return
+            except Exception as e:
+                logger.error(f"Error sending OKX subscription batch {batch_idx+1}: {e}")
+                return
+            
+            # Schedule the next batch with a longer delay (2.5 seconds)
             if batch_idx + 1 < total_batches:
                 threading.Timer(2.5, send_batch, [batch_idx + 1]).start()
                 
