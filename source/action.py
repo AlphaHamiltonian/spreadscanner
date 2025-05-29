@@ -3,7 +3,7 @@ import requests
 # --------------------------------------------------------------------------- #
 # Configuration – kept identical to your existing variable names
 # --------------------------------------------------------------------------- #
-from source.config import TELEGRAM_ENABLED
+import source.config as config
 
 TELEGRAM_BOT_TOKEN = "REDACTED_TOKEN"  # Replace with your bot token
 TELEGRAM_CHAT_ID = "REDACTED_CHAT_ID"  # Replace with your group chat ID
@@ -16,7 +16,7 @@ TELEGRAM_CHAT_ID = "REDACTED_CHAT_ID"  # Replace with your group chat ID
 def send_message(message):
     print("connecting")
     """Send a message via Telegram bot."""
-    if not TELEGRAM_ENABLED:
+    if not config.TELEGRAM_ENABLED:
         print("Telegram notifications are disabled.")
         return False
     
@@ -48,7 +48,7 @@ def send_message(message):
 def send_trade(message):
     print("connecting")
     """Send a message via Telegram bot."""
-    if not TELEGRAM_ENABLED:
+    if not config.TELEGRAM_ENABLED:
         print("Telegram notifications are disabled.")
         return False
     

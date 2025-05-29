@@ -12,6 +12,7 @@ import argparse
 from source.utils import data_store
 from source.action import send_message
 
+
 # Disable WebSocket trace for cleaner logs
 websocket.enableTrace(False)
 
@@ -45,7 +46,7 @@ def run_headless():
     """Run the application in headless mode without UI"""
 
     from source.headless import HeadlessMonitor
-    config.TELEGRAM_ENABLED = True
+    
     logger.info("Starting in headless mode...")
     
     # Set up proper signal handling
@@ -112,7 +113,7 @@ def run_with_ui():
     # Conditionally import tkinter only in UI mode
     import tkinter as tk
     from source.ui import ExchangeMonitorApp
-    config.TELEGRAM_ENABLED = False
+    
     # Set up proper signal handling
     def signal_handler(sig, frame):
         logger.info(f"Received signal {sig}, shutting down gracefully...")
@@ -215,11 +216,16 @@ def main():
     parser.add_argument('--headless', action='store_true', 
                         help='Run in headless mode without UI (for servers)')
     args = parser.parse_args()
-    send_message("Turning on telegram notifications")
+    
     # Run in either headless or UI mode
     if args.headless:
+        print(f"Before setting: config.TELEGRAM_ENABLED = {config.TELEGRAM_ENABLED}")
+        config.TELEGRAM_ENABLED = True
+        print(f"After setting: config.TELEGRAM_ENABLED = {config.TELEGRAM_ENABLED}")
+        send_message("Turning on telegram notifications")
         run_headless()
     else:
+        config.TELEGRAM_ENABLED = False
         run_with_ui()
 
 
