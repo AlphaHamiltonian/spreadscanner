@@ -5,6 +5,7 @@ import logging
 import signal
 import websocket
 from source.config import stop_event, active_threads
+import source.config as config
 import signal
 import time
 import argparse
@@ -42,8 +43,9 @@ def run_spread_calculator():
 #---------------------------------------------
 def run_headless():
     """Run the application in headless mode without UI"""
+
     from source.headless import HeadlessMonitor
-    
+    config.TELEGRAM_ENABLED = True
     logger.info("Starting in headless mode...")
     
     # Set up proper signal handling
@@ -106,10 +108,11 @@ def run_headless():
 #---------------------------------------------
 def run_with_ui():
     """Run the application with the UI interface"""
+
     # Conditionally import tkinter only in UI mode
     import tkinter as tk
     from source.ui import ExchangeMonitorApp
-    
+    config.TELEGRAM_ENABLED = False
     # Set up proper signal handling
     def signal_handler(sig, frame):
         logger.info(f"Received signal {sig}, shutting down gracefully...")

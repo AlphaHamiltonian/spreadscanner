@@ -33,7 +33,7 @@ DELETE_OLD_TIME = 10
 NUMBER_OF_SEC_THRESHOLD = 5
 NUMBER_OF_SEC_THRESHOLD_TRADE =2
 FUNDING_RATE_THRESHOLD = 0.9
-
+TELEGRAM_ENABLED = False  # Will be set dynamically based on running mode
 
 def init_logging(level: str = "INFO", *, logfile: str | pathlib.Path = LOG_FILE) -> None:
     fmt = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
