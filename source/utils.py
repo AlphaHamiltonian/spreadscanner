@@ -459,7 +459,7 @@ class DataStore:
         self.last_funding_notif_time = {}  # (exchange,symbol) → last-sent epoch
         # Per-symbol lock manager for high-frequency price updates
         self.symbol_locks = SymbolLockManager()
-
+        self.symbol_equivalence_map = {}  # Cache equivalent symbols
         # Exchange-specific reader-writer locks for better concurrency (keep for legacy compatibility)
         self.exchange_rw_locks = {
             'binance': ReaderWriterLock(),
@@ -730,9 +730,6 @@ class DataStore:
 
     def update_symbol_maps(self):
         """Update normalized symbol maps for all exchanges"""
-        # This method touches all exchanges and shared data, so we have two options:
-        
-        # Option 1: Use global lock (simpler, since this is infrequent)
         with self.lock:
             # Clear existing maps
             for exchange in self.symbol_maps:
@@ -743,9 +740,10 @@ class DataStore:
                 for symbol in self.symbols[exchange]:
                     normalized = self.normalize_symbol(exchange, symbol)
                     self.symbol_maps[exchange][normalized] = symbol
-                    
-            # Clear and rebuild equivalent symbol cache
-            self.equivalent_symbols = {}
+            
+            # CHANGE: Clear the new cache when symbols change
+            self.symbol_equivalence_map.clear()
+            self.equivalent_symbols = {}  # Keep clearing old cache for compatibility
 
     def normalize_symbol(self, exchange, symbol):
         """Get normalized symbol with caching"""
@@ -757,28 +755,30 @@ class DataStore:
         return self.normalized_cache[cache_key]
 
     def find_equivalent_symbol(self, source_exchange, source_symbol, target_exchange):
-        """Find equivalent symbol in target exchange with caching"""
-        cache_key = f"{source_exchange}:{source_symbol}:{target_exchange}"
+        """Find equivalent symbol in target exchange with optimized caching"""
+        # Use tuple-based cache key (faster than string)
+        cache_key = (source_exchange, source_symbol, target_exchange)
         
         # Return from cache if available
-        if cache_key in self.equivalent_symbols:
-            return self.equivalent_symbols[cache_key]
-            
+        if cache_key in self.symbol_equivalence_map:
+            return self.symbol_equivalence_map[cache_key]
+        
         # Get normalized version of source symbol
         normalized_source = self.normalize_symbol(source_exchange, source_symbol)
         
         # Look for matching symbol in target exchange
-        with self.lock:
+        # CHANGE: Use exchange-specific lock instead of global lock
+        with self.exchange_locks[target_exchange]:
             target_symbols = self.symbols[target_exchange]
             for target_symbol in target_symbols:
                 normalized_target = self.normalize_symbol(target_exchange, target_symbol)
                 if normalized_source == normalized_target:
                     # Store in cache and return
-                    self.equivalent_symbols[cache_key] = target_symbol
+                    self.symbol_equivalence_map[cache_key] = target_symbol
                     return target_symbol
-                    
-        # No match found
-        self.equivalent_symbols[cache_key] = None
+        
+        # No match found - cache the miss too
+        self.symbol_equivalence_map[cache_key] = None
         return None
 
     def update_price_direct(self, exchange, symbol, bid, ask, bid_qty=None, ask_qty=None, last=None):
