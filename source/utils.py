@@ -6,8 +6,8 @@ import threading
 import requests
 from collections import deque
 import random
-from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD, DIFFERENCE_THRESHOLD, UPPER_LIMIT, LOWER_LIMIT, DELETE_OLD_TIME, NUMBER_OF_SEC_THRESHOLD, FUNDING_RATE_THRESHOLD
-from source.message import send_message
+from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD, DIFFERENCE_THRESHOLD, UPPER_LIMIT, LOWER_LIMIT, DELETE_OLD_TIME, NUMBER_OF_SEC_THRESHOLD, FUNDING_RATE_THRESHOLD, NUMBER_OF_SEC_THRESHOLD_TRADE
+from source.action import send_message, send_trade
 import threading
 from threading import RLock
 
@@ -693,16 +693,18 @@ class DataStore:
             # 2. No notification sent in the past 30 minutes for this asset pair
             last_notif_time = self.last_notification_time.get(asset_pair_key, 0)
             
-            if len(unique_seconds) >= NUMBER_OF_SEC_THRESHOLD and current_time - last_notif_time > 1800:  # 30 minutes = 1800 seconds
+            if len(unique_seconds) >= NUMBER_OF_SEC_THRESHOLD_TRADE and current_time - last_notif_time > 1800:  # 30 minutes = 1800 seconds
                 if spread_pct > UPPER_LIMIT:
                     notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% above upper limit ({UPPER_LIMIT}%)"
                 else:  # spread_pct < LOWER_LIMIT
                     notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% below lower limit ({LOWER_LIMIT}%)"
                 if exchange1==exchange2 and exchange1 == "binance":
-                    success = send_message(notification_message)
-                if success:
-                    self.last_notification_time[asset_pair_key] = current_time
-                    logger.info(f"Notification sent for {asset_pair_key}. Next notification in 30 minutes.")
+                    send_trade(f"mock trade: {notification_message}")
+                    if len(unique_seconds) >= NUMBER_OF_SEC_THRESHOLD:
+                        success = send_message(notification_message)    
+                    if success:
+                        self.last_notification_time[asset_pair_key] = current_time
+                        logger.info(f"Notification sent for {asset_pair_key}. Next notification in 30 minutes.")
         return spread_pct
 
     def get_spread(self, exchange, symbol, spread_type='vs_spot'):

@@ -9,7 +9,7 @@ import signal
 import time
 import argparse
 from source.utils import data_store
-from source.message import send_message
+from source.action import send_message
 
 # Disable WebSocket trace for cleaner logs
 websocket.enableTrace(False)
