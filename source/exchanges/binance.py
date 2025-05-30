@@ -177,9 +177,11 @@ class BinanceConnector(BaseExchangeConnector):
                     self._schedule_reconnection(batch_name, symbols, batch_idx, total_batches)
                     
             def on_ping(ws, message):
+                """Handle ping frames properly"""
                 try:
                     ws.sock.pong(message)
                     self.batch_health[batch_name]['last_ping'] = time.time()
+                    logger.debug(f"Handled ping for {batch_name}")
                 except Exception as e:
                     logger.error(f"Error handling ping for {batch_name}: {e}")
                     
@@ -336,14 +338,21 @@ class BinanceConnector(BaseExchangeConnector):
                 
                 if not stop_event.is_set():
                     self._schedule_spot_reconnection()
-                    
+            def on_ping(ws, message):
+                """Handle ping frames for spot"""
+                try:
+                    ws.sock.pong(message)
+                    logger.debug("Handled ping for Binance spot")
+                except Exception as e:
+                    logger.error(f"Error handling spot ping: {e}")                  
             # Create WebSocket
             self.spot_ws = websocket.WebSocketApp(
                 f"{ws_url}/!ticker@arr",
                 on_open=on_open,
                 on_message=on_message,
                 on_error=on_error,
-                on_close=on_close
+                on_close=on_close,
+                on_ping=on_ping
             )
             
             # Start in thread

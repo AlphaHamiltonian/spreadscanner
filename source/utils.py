@@ -554,26 +554,48 @@ class DataStore:
             symbols_to_process = self.dirty_symbols.copy()
             self.dirty_symbols.clear()
 
-        # Take snapshots only for exchanges that have dirty symbols
-        affected_exchanges = set(exchange for exchange, symbol in symbols_to_process)
+        # CHANGE 1: Pre-compute what symbols we actually need
+        required_symbols = {}
+        for exchange, symbol in symbols_to_process:
+            if symbol.endswith('_SPOT'):
+                continue  # Skip spot symbols early
+                
+            if exchange not in required_symbols:
+                required_symbols[exchange] = set()
+            
+            # Add the symbol itself
+            required_symbols[exchange].add(symbol)
+            
+            # Add its spot pair
+            required_symbols[exchange].add(f"{symbol}_SPOT")
+            
+            # Add equivalent symbols from other exchanges
+            for other in ['binance', 'bybit', 'okx']:
+                if other != exchange:
+                    equiv = self.find_equivalent_symbol(exchange, symbol, other)
+                    if equiv:
+                        if other not in required_symbols:
+                            required_symbols[other] = set()
+                        required_symbols[other].add(equiv)
+
+        # CHANGE 2: Only snapshot the symbols we actually need
         exchange_snapshots = {}
-        
-        for exchange in affected_exchanges:
+        for exchange, needed_symbols in required_symbols.items():
             exchange_snapshots[exchange] = {}
             
-            # Get list of symbols for this exchange
-            with self.exchange_locks[exchange]:
-                all_symbols = list(self.price_data[exchange].keys())
-            
-            # Take snapshot of ALL symbols from affected exchanges
-            # (needed because cross-exchange comparisons require full data)
-            for symbol in all_symbols:
+            for symbol in needed_symbols:
                 symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
                 with symbol_lock:  # Read lock
                     symbol_data = self.price_data[exchange].get(symbol, {})
-                    if symbol_data:
-                        exchange_snapshots[exchange][symbol] = symbol_data.copy()
+                    if symbol_data and 'bid' in symbol_data and 'ask' in symbol_data:
+                        # CHANGE 3: Only copy essential fields
+                        exchange_snapshots[exchange][symbol] = {
+                            'bid': symbol_data['bid'],
+                            'ask': symbol_data['ask'],
+                            'timestamp': symbol_data.get('timestamp', 0)
+                        }
 
+        # Rest of your code remains exactly the same...
         # Calculate spreads only for dirty symbols
         for exchange, dirty_symbol in symbols_to_process:
             if exchange not in exchange_snapshots:
@@ -609,18 +631,6 @@ class DataStore:
             for other in ("binance", "bybit", "okx"):
                 if other == exchange:
                     continue
-                    
-                # Get snapshots for other exchanges if needed
-                if other not in exchange_snapshots:
-                    exchange_snapshots[other] = {}
-                    with self.exchange_locks[other]:
-                        other_symbols = list(self.price_data[other].keys())
-                    for symbol in other_symbols:
-                        symbol_lock = self.symbol_locks.get_lock(other, symbol)
-                        with symbol_lock:
-                            symbol_data = self.price_data[other].get(symbol, {})
-                            if symbol_data:
-                                exchange_snapshots[other][symbol] = symbol_data.copy()
                 
                 equiv = self.find_equivalent_symbol(exchange, dirty_symbol, other)
                 if not equiv:
@@ -647,8 +657,6 @@ class DataStore:
             }
 
         self.spread_timestamp = current_time
-
-
     def _calculate_spread(self, price1, price2, exchange1=None, symbol1=None, exchange2=None, symbol2=None):
         """Calculate spread with different staleness thresholds for futures vs spot"""
         # Basic validation
