@@ -6,7 +6,7 @@ import threading
 import requests
 from collections import deque
 import random
-from source.config import SPOT_THRESHOLD, FUTURES_THRESHOLD, DIFFERENCE_THRESHOLD, UPPER_LIMIT, LOWER_LIMIT, DELETE_OLD_TIME, NUMBER_OF_SEC_THRESHOLD, FUNDING_RATE_THRESHOLD, NUMBER_OF_SEC_THRESHOLD_TRADE
+from source.config import Config
 from source.action import send_message, send_trade
 import threading
 from threading import RLock
@@ -640,11 +640,11 @@ class DataStore:
         
         
         # Determine maximum allowed age for each source
-        max_age1 = SPOT_THRESHOLD if is_spot1 else FUTURES_THRESHOLD
-        max_age2 = SPOT_THRESHOLD if is_spot2 else FUTURES_THRESHOLD
+        max_age1 = Config.SPOT_THRESHOLD if is_spot1 else Config.FUTURES_THRESHOLD
+        max_age2 = Config.SPOT_THRESHOLD if is_spot2 else Config.FUTURES_THRESHOLD
         
         # Check if data is stale (using appropriate thresholds)
-        if price1_age > max_age1 or price2_age > max_age2 or abs(price1_age-price2_age)> DIFFERENCE_THRESHOLD:
+        if price1_age > max_age1 or price2_age > max_age2 or abs(price1_age-price2_age)> Config.DIFFERENCE_THRESHOLD:
             # Log with threshold info (reduce volume with sampling)
             if random.random() < 0.0001:  # Log only 5% of occurrences
                 logger.warning(f"Stale data: {source1}({price1_age:.2f}s/{max_age1}s) vs "
@@ -667,7 +667,7 @@ class DataStore:
         
         # Express as percentage
         spread_pct = avg_ratio * 100
-        if spread_pct > UPPER_LIMIT or spread_pct < LOWER_LIMIT:
+        if spread_pct > Config.UPPER_LIMIT or spread_pct < Config.LOWER_LIMIT:
             # Create a unique key for this asset pair
             asset_pair_key = f"{source1}_vs_{source2}"
             
@@ -683,7 +683,7 @@ class DataStore:
             
             # Remove timestamps older than 5 seconds
             self.threshold_timestamps[asset_pair_key] = [ts for ts in self.threshold_timestamps[asset_pair_key] 
-                                                    if current_time - ts <= DELETE_OLD_TIME]
+                                                    if current_time - ts <= Config.DELETE_OLD_TIME]
             
             # Count unique seconds in the timestamp list
             unique_seconds = set(int(ts) for ts in self.threshold_timestamps[asset_pair_key])
@@ -693,14 +693,14 @@ class DataStore:
             # 2. No notification sent in the past 30 minutes for this asset pair
             last_notif_time = self.last_notification_time.get(asset_pair_key, 0)
             
-            if len(unique_seconds) >= NUMBER_OF_SEC_THRESHOLD_TRADE and current_time - last_notif_time > 1800:  # 30 minutes = 1800 seconds
-                if spread_pct > UPPER_LIMIT:
-                    notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% above upper limit ({UPPER_LIMIT}%)"
+            if len(unique_seconds) >= Config.NUMBER_OF_SEC_THRESHOLD_TRADE and current_time - last_notif_time > 1800:  # 30 minutes = 1800 seconds
+                if spread_pct > Config.UPPER_LIMIT:
+                    notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% above upper limit ({Config.UPPER_LIMIT}%)"
                 else:  # spread_pct < LOWER_LIMIT
-                    notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% below lower limit ({LOWER_LIMIT}%)"
+                    notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% below lower limit ({Config.LOWER_LIMIT}%)"
                 if exchange1==exchange2 and exchange1 == "binance":
                     send_trade(f"mock trade: {notification_message}")
-                    if len(unique_seconds) >= NUMBER_OF_SEC_THRESHOLD:
+                    if len(unique_seconds) >= Config.NUMBER_OF_SEC_THRESHOLD:
                         success = send_message(notification_message)    
                         if success:
                             self.last_notification_time[asset_pair_key] = current_time
@@ -828,7 +828,7 @@ class DataStore:
             except (ValueError, TypeError):
                 return                               
             # --- 3. alert logic -----------------------------------------------------
-            if abs(r) >= FUNDING_RATE_THRESHOLD:         
+            if abs(r) >= Config.FUNDING_RATE_THRESHOLD:         
                 key, now = (exchange, symbol), time.time()
                 if now - self.last_funding_notif_time.get(key, 0) < 1800:
                     return                                   # still in 30-min cool-down

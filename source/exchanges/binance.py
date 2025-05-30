@@ -501,11 +501,6 @@ class BinanceConnector(BaseExchangeConnector):
         except Exception as e:
             logger.error(f"Error reinitializing futures: {e}")
 
-    def check_symbol_freshness(self):
-        """Legacy method for compatibility - now handled by health monitors."""
-        # This is now handled by the health monitoring system
-        pass
-
     def _schedule_timer(self, timer_id, delay, callback):
         """Schedule a timer with proper cleanup."""
         with self._timer_lock:
