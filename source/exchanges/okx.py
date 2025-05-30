@@ -580,7 +580,7 @@ class OkxConnector(BaseExchangeConnector):
             args = []
             for symbol in batch:
                 args.append({
-                    "channel": "books",  # Use "books" channel for order book data
+                    "channel": "books",
                     "instId": symbol
                 })
                 
@@ -592,10 +592,15 @@ class OkxConnector(BaseExchangeConnector):
             logger.info(f"Sending OKX subscription batch {batch_idx+1}/{total_batches} ({len(batch)} symbols)")
             
             try:
-                # Check WebSocket is valid before sending
                 if (ws and hasattr(ws, 'sock') and ws.sock and 
                     hasattr(ws.sock, 'connected') and ws.sock.connected):
                     ws.send(subscribe_msg)
+                    
+                    # Send a ping after every 3rd batch to keep connection alive
+                    if batch_idx % 3 == 2:
+                        ws.send(json.dumps({"event": "ping"}))
+                        self.okx_last_data_time = time.time()  
+                        logger.debug("Sent keepalive ping during OKX subscription")
                 else:
                     logger.warning(f"OKX WebSocket not valid for batch {batch_idx+1}")
                     return
@@ -603,12 +608,13 @@ class OkxConnector(BaseExchangeConnector):
                 logger.error(f"Error sending OKX subscription batch {batch_idx+1}: {e}")
                 return
             
-            # Schedule the next batch with a longer delay (2.5 seconds)
+            # Schedule the next batch with a shorter delay
             if batch_idx + 1 < total_batches:
-                threading.Timer(2.5, send_batch, [batch_idx + 1]).start()
+                threading.Timer(1.0, send_batch, [batch_idx + 1]).start()  # Reduced from 2.5 to 1.0
                 
         # Start the batch process
         send_batch(0)
+
 
     def _fetch_funding_batch(self, symbols_batch):
         """Fetch funding rates for a batch of symbols"""

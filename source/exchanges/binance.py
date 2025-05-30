@@ -33,7 +33,7 @@ class BinanceConnector(BaseExchangeConnector):
         })
         
         # Recovery configuration
-        self.batch_size = 100  # Smaller batches for better recovery
+        self.batch_size = 200  # Smaller batches for better recovery
         self.max_reconnect_attempts = 5
         self.stale_threshold = 30  # seconds
         self.health_check_interval = 20  # seconds
