@@ -9,7 +9,7 @@ class Config:
     # Spread monitoring thresholds
     FUTURES_THRESHOLD = 10
     SPOT_THRESHOLD = 10
-    DIFFERENCE_THRESHOLD = 1
+    DIFFERENCE_THRESHOLD = 10
     UPPER_LIMIT = 1
     LOWER_LIMIT = -9
     DELETE_OLD_TIME = 10

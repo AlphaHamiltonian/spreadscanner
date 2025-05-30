@@ -75,8 +75,8 @@ class BinanceConnector(BaseExchangeConnector):
                                         thread = threading.Thread(
                                             target=new_ws.run_forever,
                                             kwargs={
-                                                'ping_interval': 30,
-                                                'ping_timeout': 10,
+                                                'ping_interval': 180,  # 3 minutes
+                                                'ping_timeout': 60,    # 1 minute
                                                 'sslopt': {"cert_reqs": 0},
                                                 'skip_utf8_validation': True
                                             },
@@ -151,8 +151,8 @@ class BinanceConnector(BaseExchangeConnector):
                 thread = threading.Thread(
                     target=new_ws.run_forever,
                     kwargs={
-                        'ping_interval': 20,
-                        'ping_timeout': 15,
+                        'ping_interval': 180,  # 3 minutes
+                        'ping_timeout': 60,    # 1 minute
                         'sslopt': {"cert_reqs": 0},
                         'skip_utf8_validation': True
                     },
@@ -177,8 +177,8 @@ class BinanceConnector(BaseExchangeConnector):
                 on_open=enhanced_on_open,
                 on_error=enhanced_on_error,
                 on_close=enhanced_on_close,
-                ping_interval=20,
-                ping_timeout=15
+                ping_interval=180,  # 3 minutes
+                ping_timeout=60     # 1 minute
             )
             manager.ws = ws
             manager.thread = thread
@@ -282,205 +282,124 @@ class BinanceConnector(BaseExchangeConnector):
 
     def connect_spot_websocket(self):
         """Connect to Binance spot WebSocket with improved reliability"""
-        # Use a dictionary for tracking state
-        self.spot_connection_state = {
+        # Get futures symbols to create spot subscriptions
+        futures_symbols = list(data_store.get_symbols('binance'))
+        
+        # Create batches of symbols (Binance allows up to 1024 streams per connection)
+        # But for stability, use smaller batches of 200 like futures
+        batch_size = 200
+        symbol_batches = [futures_symbols[i:i + batch_size] for i in range(0, len(futures_symbols), batch_size)]
+        
+        logger.info(f"Preparing {len(symbol_batches)} spot WebSocket connections for {len(futures_symbols)} symbols")
+        
+        # Create a WebSocket connection for each batch
+        for batch_idx, symbol_batch in enumerate(symbol_batches):
+            self._create_spot_websocket_for_batch(symbol_batch, batch_idx)
+
+    def _create_spot_websocket_for_batch(self, symbol_batch, batch_idx):
+        """Create a spot WebSocket connection for a specific batch of symbols"""
+        # Create stream parameters for this batch
+        stream_params = "/".join(f"{s.lower()}@ticker" for s in symbol_batch)
+        ws_url = f"wss://stream.binance.com:9443/stream?streams={stream_params}"
+        
+        # Create connection state for this batch
+        connection_state = {
             'connected': False,
             'last_data_time': time.time(),
             'last_pong_time': time.time(),
             'connection_time': time.time(),
-            'reconnect_count': 0
+            'batch_idx': batch_idx,
+            'symbols': symbol_batch
         }
-        
-        # Base WebSocket URL
-        base_url = "wss://stream.binance.com:9443/ws"
         
         def on_message(ws, message):
             """Handle WebSocket messages"""
             # Update activity timestamp
-            self.spot_connection_state['last_data_time'] = time.time()
+            connection_state['last_data_time'] = time.time()
             
             try:
                 data = json.loads(message)
                 
-                # Handle application-level ping
-                if isinstance(data, dict) and 'ping' in data:
-                    ws.send(json.dumps({"pong": data['ping']}))
-                    logger.debug("Responded to Binance spot application ping")
-                    return
-                    
-                # Process ticker data
-                if isinstance(data, list):
-                    # Process in batches for efficiency
-                    updates = {}
-                    for ticker in data:
-                        if 's' in ticker:  # Symbol field
-                            symbol = ticker['s']
-                            spot_key = f"{symbol}_SPOT"
+                # Handle combined stream format
+                if 'stream' in data and 'data' in data:
+                    ticker = data['data']
+                    if 's' in ticker:  # Symbol field
+                        symbol = ticker['s']
+                        spot_key = f"{symbol}_SPOT"
+                        
+                        # Extract prices from ticker format
+                        last_price = float(ticker.get('c', 0))  # Current price
+                        bid_price = float(ticker.get('b', last_price))  # Best bid price
+                        ask_price = float(ticker.get('a', last_price))  # Best ask price
+                        
+                        if last_price > 0:  # Valid price
+                            # Update spot price
+                            data_store.update_price_direct('binance', spot_key, bid_price, ask_price, last=last_price)
                             
-                            # Extract prices
-                            last_price = float(ticker['c'])
-                            bid_price = float(ticker.get('b', last_price))
-                            ask_price = float(ticker.get('a', last_price))
-                            
-                            # Get the corresponding futures data if it exists
-                            future_data = data_store.get_price_data('binance', symbol)
-                            
-                            # If we have both futures and spot data, update atomically
-                            if future_data and 'bid' in future_data and 'ask' in future_data:
-                                spot_data = {
-                                    'bid': bid_price,
-                                    'ask': ask_price,
-                                    'last': last_price
-                                }
-                                data_store.update_related_prices('binance', symbol, future_data, spot_key, spot_data)
-                            else:
-                                data_store.update_price_direct('binance', spot_key, bid_price, ask_price, last=last_price)                    
-                    # Log occasionally
-                    if random.random() < 0.0001:  # Very infrequent
-                        logger.info(f"Processed {len(updates) if updates else 'batch of'} Binance spot symbols")
             except Exception as e:
-                logger.error(f"Error processing Binance spot message: {e}")
+                logger.error(f"Error processing Binance spot message batch {batch_idx}: {e}")
         
         def on_open(ws):
             """Handle WebSocket open event"""
-            logger.info("Binance spot WebSocket connected successfully")
-            self.spot_connection_state['connected'] = True
-            self.spot_connection_state['last_data_time'] = time.time()
-            self.spot_connection_state['last_pong_time'] = time.time()
-            self.spot_connection_state['connection_time'] = time.time()
-            self.spot_connection_state['reconnect_count'] = 0
-            
-            # Subscribe to all tickers (single stream)
-            subscribe_msg = json.dumps({
-                "method": "SUBSCRIBE",
-                "params": ["!ticker@arr"],
-                "id": 1
-            })
-            
-            # Send subscription
-            ws.send(subscribe_msg)
-            logger.info("Sent Binance spot subscription request")
+            logger.info(f"Binance spot WebSocket batch {batch_idx + 1} connected ({len(symbol_batch)} symbols)")
+            connection_state['connected'] = True
+            connection_state['last_data_time'] = time.time()
+            connection_state['last_pong_time'] = time.time()
+            connection_state['connection_time'] = time.time()
         
         def on_error(ws, error):
             """Handle WebSocket errors"""
-            logger.error(f"Binance spot WebSocket error: {error}")
-            self.spot_connection_state['connected'] = False
+            logger.error(f"Binance spot WebSocket batch {batch_idx} error: {error}")
+            connection_state['connected'] = False
         
         def on_close(ws, close_status_code, close_msg):
             """Handle WebSocket close events"""
-            logger.warning(f"Binance spot WebSocket closed: {close_status_code} - {close_msg}")
-            self.spot_connection_state['connected'] = False
+            logger.warning(f"Binance spot WebSocket batch {batch_idx} closed: {close_status_code} - {close_msg}")
+            connection_state['connected'] = False
             
-            # Only reconnect if not shutting down
+            # Reconnect after delay
             if not stop_event.is_set():
-                # Force immediate reconnection
-                create_connection()
+                threading.Timer(5.0, lambda: self._create_spot_websocket_for_batch(symbol_batch, batch_idx)).start()
         
         def on_ping(ws, message):
             """Handle protocol-level ping frames"""
-            self.spot_connection_state['last_data_time'] = time.time()
+            connection_state['last_data_time'] = time.time()
         
         def on_pong(ws, message):
             """Handle protocol-level pong responses"""
-            self.spot_connection_state['last_data_time'] = time.time()
-            self.spot_connection_state['last_pong_time'] = time.time()
+            connection_state['last_data_time'] = time.time()
+            connection_state['last_pong_time'] = time.time()
         
-        def create_connection():
-            """Create and start a new WebSocket connection"""
-            try:
-                # Force close any existing connection
-                if hasattr(self, 'spot_ws') and self.spot_ws:
-                    try:
-                        self.spot_ws.close()
-                        logger.info("Closed existing Binance spot WebSocket")
-                    except Exception as e:
-                        logger.error(f"Error closing existing Binance spot connection: {e}")
-                
-                # Clear references
-                self.spot_ws = None
-                self.spot_thread = None
-                
-                # Create new WebSocket with all handlers
-                new_ws = websocket.WebSocketApp(
-                    f"{base_url}/!ticker@arr",
-                    on_open=on_open,
-                    on_message=on_message,
-                    on_error=on_error,
-                    on_close=on_close,
-                    on_ping=on_ping,
-                    on_pong=on_pong
-                )
-                
-                # Store reference
-                self.spot_ws = new_ws
-                
-                # Start in a new thread
-                new_thread = threading.Thread(
-                    target=lambda: new_ws.run_forever(
-                        ping_interval=20,
-                        ping_timeout=15,
-                        sslopt={"cert_reqs": 0}
-                    ),
-                    daemon=True,
-                    name="binance_spot_ws"
-                )
-                new_thread.start()
-                self.spot_thread = new_thread
-                
-                # Store in manager dictionary for consistent management
-                self.websocket_managers["binance_spot_ws"] = {
-                    'ws': new_ws,
-                    'thread': new_thread,
-                    'is_running': True,
-                    'last_activity': time.time()
-                }
-                
-                logger.info("Created new Binance spot WebSocket connection")
-                return new_ws
-            except Exception as e:
-                logger.error(f"Error creating Binance spot connection: {e}")
-                if not stop_event.is_set():
-                    threading.Timer(5.0, create_connection).start()
+        # Create WebSocket
+        ws = websocket.WebSocketApp(
+            ws_url,
+            on_open=on_open,
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close,
+            on_ping=on_ping,
+            on_pong=on_pong
+        )
         
-        def monitor_health():
-            """Aggressive health monitoring with forced reconnection"""
-            if stop_event.is_set():
-                return
-            
-            try:
-                current_time = time.time()
-                state = self.spot_connection_state
-                
-                # ALWAYS reconnect if no pong response for 3 minutes
-                if current_time - state.get('last_pong_time', 0) > 180:
-                    logger.warning(f"Forcing Binance spot reconnection: no pong for {current_time - state.get('last_pong_time', 0):.1f}s")
-                    create_connection()
-                    
-                # Or if no data for 90 seconds
-                elif current_time - state.get('last_data_time', 0) > 90:
-                    logger.warning(f"Forcing Binance spot reconnection: no data for {current_time - state.get('last_data_time', 0):.1f}s")
-                    create_connection()
-                
-                # Or if connection is marked as disconnected
-                elif not state.get('connected', False):
-                    logger.warning("Forcing Binance spot reconnection: connection marked as disconnected")
-                    create_connection()
-                    
-                # Log health status
-                else:
-                    logger.info(f"Binance spot connection healthy: last data {current_time - state.get('last_data_time', 0):.1f}s ago")
-            except Exception as e:
-                logger.error(f"Error in Binance spot health monitor: {e}")
-            
-            # Schedule next check if not stopping
-            if not stop_event.is_set():
-                threading.Timer(30.0, monitor_health).start()
+        # Start in a new thread
+        thread = threading.Thread(
+            target=lambda: ws.run_forever(
+                ping_interval=180,  # 3 minutes
+                ping_timeout=60,    # 1 minute
+                sslopt={"cert_reqs": 0}
+            ),
+            daemon=True,
+            name=f"binance_spot_ws_{batch_idx}"
+        )
+        thread.start()
         
-        # Start initial connection
-        create_connection()
-        
-        # Start health monitoring after short delay
-        threading.Timer(60.0, monitor_health).start()
+        # Store in manager dictionary
+        self.websocket_managers[f"binance_spot_ws_{batch_idx}"] = {
+            'ws': ws,
+            'thread': thread,
+            'connection_state': connection_state,
+            'is_running': True
+        }
 
     def _fetch_funding_batch(self, symbols_batch):
         """Fetch funding rates for a batch of symbols"""
