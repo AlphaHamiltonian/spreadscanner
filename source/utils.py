@@ -702,9 +702,9 @@ class DataStore:
                     send_trade(f"mock trade: {notification_message}")
                     if len(unique_seconds) >= NUMBER_OF_SEC_THRESHOLD:
                         success = send_message(notification_message)    
-                    if success:
-                        self.last_notification_time[asset_pair_key] = current_time
-                        logger.info(f"Notification sent for {asset_pair_key}. Next notification in 30 minutes.")
+                        if success:
+                            self.last_notification_time[asset_pair_key] = current_time
+                            logger.info(f"Notification sent for {asset_pair_key}. Next notification in 30 minutes.")
         return spread_pct
 
     def get_spread(self, exchange, symbol, spread_type='vs_spot'):

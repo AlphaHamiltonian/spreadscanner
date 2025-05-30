@@ -24,9 +24,9 @@ import pathlib
 
 LOG_FILE = pathlib.Path.cwd() / "exchange_monitor.log"
         # Set thresholds (configurable)
-FUTURES_THRESHOLD = 100  # Futures: 2 seconds
-SPOT_THRESHOLD = 100    # Spot: 10 seconds
-DIFFERENCE_THRESHOLD = 10
+FUTURES_THRESHOLD = 10  # Futures: 2 seconds
+SPOT_THRESHOLD = 10    # Spot: 10 seconds
+DIFFERENCE_THRESHOLD = 1
 UPPER_LIMIT = 1
 LOWER_LIMIT = -9
 DELETE_OLD_TIME = 10
