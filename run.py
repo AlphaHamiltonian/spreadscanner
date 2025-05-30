@@ -219,9 +219,7 @@ def main():
     
     # Run in either headless or UI mode
     if args.headless:
-        print(f"Before setting: config.TELEGRAM_ENABLED = {config.TELEGRAM_ENABLED}")
         config.TELEGRAM_ENABLED = True
-        print(f"After setting: config.TELEGRAM_ENABLED = {config.TELEGRAM_ENABLED}")
         send_message("Turning on telegram notifications")
         run_headless()
     else:
