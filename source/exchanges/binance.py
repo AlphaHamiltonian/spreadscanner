@@ -21,7 +21,7 @@ class BinanceConnector(BaseExchangeConnector):
         # Connection tracking
         self.ws_batches = {}  # batch_name -> {ws, thread, symbols, state}
         self.symbol_to_batch = {}  # symbol -> batch_name mapping
-        
+        self.reconnecting = set()
         # Health monitoring
         self.symbol_last_update = defaultdict(lambda: time.time())
         self.batch_health = defaultdict(lambda: {
@@ -33,7 +33,7 @@ class BinanceConnector(BaseExchangeConnector):
         })
         
         # Recovery configuration
-        self.batch_size = 200  # Smaller batches for better recovery
+        self.batch_size = 50  # Smaller batches for better recovery
         self.max_reconnect_attempts = 5
         self.stale_threshold = 30  # seconds
         self.health_check_interval = 20  # seconds
@@ -136,7 +136,7 @@ class BinanceConnector(BaseExchangeConnector):
             })
             
             def on_message(ws, message):
-                try:
+                try:             
                     data = json.loads(message)
                     
                     # Handle stream data
@@ -199,9 +199,10 @@ class BinanceConnector(BaseExchangeConnector):
             thread = threading.Thread(
                 target=ws.run_forever,
                 kwargs={
-                    'ping_interval': 20,
+                    'ping_interval': 30,
                     'ping_timeout': 10,
-                    'sslopt': {"cert_reqs": 0}
+                    'sslopt': {"cert_reqs": 0},
+                    'skip_utf8_validation': True  # Add this for performance
                 },
                 daemon=True,
                 name=batch_name
@@ -228,6 +229,11 @@ class BinanceConnector(BaseExchangeConnector):
             logger.error(f"Error connecting futures batch {batch_name}: {e}")
 
     def _schedule_reconnection(self, batch_name, symbols, batch_idx, total_batches):
+
+        # Add this check at the beginning
+        if batch_name in self.reconnecting:
+            logger.debug(f"{batch_name} already reconnecting, skipping")
+            return        
         """Schedule reconnection with exponential backoff."""
         health = self.batch_health[batch_name]
         attempts = health['reconnect_attempts']
@@ -275,6 +281,9 @@ class BinanceConnector(BaseExchangeConnector):
                 
             except Exception as e:
                 logger.error(f"Error reconnecting futures batch {batch_name}: {e}")
+            finally:
+                # Add this line
+                self.reconnecting.discard(batch_name)
 
     def connect_spot_websocket(self):
         """Connect to Binance spot WebSocket with enhanced reliability."""
@@ -285,10 +294,17 @@ class BinanceConnector(BaseExchangeConnector):
                 try:
                     data = json.loads(message)
                     
-                    # Handle ping/pong
-                    if isinstance(data, dict) and 'ping' in data:
-                        ws.send(json.dumps({"pong": data['ping']}))
-                        return
+                    # Handle ping/pong properly for Binance
+                    if isinstance(data, dict):
+                        if 'ping' in data:
+                            ws.send(json.dumps({"pong": data['ping']}))
+                            self.spot_last_update = time.time()
+                            return
+                        elif data.get('result') is None and data.get('id') == 1:
+                            # Subscription confirmation
+                            logger.info("Binance spot subscription confirmed")
+                            self.spot_last_update = time.time()
+                            return
                         
                     # Process ticker array
                     if isinstance(data, list):
@@ -317,7 +333,7 @@ class BinanceConnector(BaseExchangeConnector):
                         
                 except Exception as e:
                     logger.error(f"Error processing Binance spot message: {e}")
-                    
+        
             def on_open(ws):
                 logger.info("Binance spot WebSocket connected")
                 self.spot_reconnect_attempts = 0
@@ -329,7 +345,24 @@ class BinanceConnector(BaseExchangeConnector):
                     "id": 1
                 })
                 ws.send(subscribe_msg)
+                def keepalive_spot():
+                    while not stop_event.is_set() and self.spot_ws:
+                        try:
+                            if hasattr(self.spot_ws, 'sock') and self.spot_ws.sock and self.spot_ws.sock.connected:
+                                # Send a LIST_SUBSCRIPTIONS request as keepalive
+                                self.spot_ws.send(json.dumps({
+                                    "method": "LIST_SUBSCRIPTIONS",
+                                    "id": int(time.time())
+                                }))
+                                logger.debug("Sent Binance spot keepalive")
+                        except Exception as e:
+                            logger.error(f"Error sending spot keepalive: {e}")
+                        
+                        time.sleep(45)  # Every 45 seconds
                 
+                # Start keepalive thread after successful subscription
+                threading.Thread(target=keepalive_spot, daemon=True, name="binance_spot_keepalive").start()
+                logger.info("Started Binance spot keepalive thread")                
             def on_error(ws, error):
                 logger.error(f"Binance spot WebSocket error: {error}")
                 
@@ -358,9 +391,10 @@ class BinanceConnector(BaseExchangeConnector):
             # Start in thread
             thread = threading.Thread(
                 target=lambda: self.spot_ws.run_forever(
-                    ping_interval=20,
-                    ping_timeout=10,
-                    sslopt={"cert_reqs": 0}
+                    ping_interval=30,
+                    ping_timeout=20,
+                    sslopt={"cert_reqs": 0},
+                    skip_utf8_validation=True  # Add this
                 ),
                 daemon=True,
                 name="binance_spot_ws"

@@ -128,7 +128,9 @@ class OkxConnector(BaseExchangeConnector):
                 if 'event' in data and data['event'] == 'ping':
                     pong_msg = json.dumps({"event": "pong"})
                     ws.send(pong_msg)
+                    self.okx_last_data_time = time.time()  # Add this line
                     return
+
                     
                 # Process orderbook data
                 if 'data' in data and isinstance(data['data'], list) and len(data['data']) > 0:
@@ -190,8 +192,8 @@ class OkxConnector(BaseExchangeConnector):
             on_open=on_open,
             on_error=on_error,
             on_close=on_close,
-            ping_interval=15,
-            ping_timeout=10
+            ping_interval=30,
+            ping_timeout=20
         )
         
         # Store and connect

@@ -7,9 +7,9 @@ LOG_FILE = pathlib.Path.cwd() / "exchange_monitor.log"
 # Consolidate thresholds into a single config object
 class Config:
     # Spread monitoring thresholds
-    FUTURES_THRESHOLD = 100
-    SPOT_THRESHOLD = 100
-    DIFFERENCE_THRESHOLD = 10
+    FUTURES_THRESHOLD = 10
+    SPOT_THRESHOLD = 10
+    DIFFERENCE_THRESHOLD = 1
     UPPER_LIMIT = 1
     LOWER_LIMIT = -9
     DELETE_OLD_TIME = 10

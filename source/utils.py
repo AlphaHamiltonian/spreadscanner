@@ -261,15 +261,18 @@ class WebSocketManager:
                 
                 # Bybit needs more aggressive ping/pong
                 if "bybit" in self.name.lower():
-                    ping_interval = 15
-                    ping_timeout = 10
-                    
+                    ping_interval = 20
+                    ping_timeout = 15
+                elif "okx" in self.name.lower():
+                    ping_interval = 30
+                    ping_timeout = 20                    
                 self.thread = threading.Thread(
                     target=self.ws.run_forever,
                     kwargs={
                         'ping_interval': ping_interval,
                         'ping_timeout': ping_timeout,
-                        'sslopt': {"cert_reqs": 0}
+                        'sslopt': {"cert_reqs": 0},
+                        'skip_utf8_validation': True  # Add this
                     },
                     daemon=True,
                     name=self.name
