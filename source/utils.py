@@ -461,6 +461,9 @@ class DataStore:
         self.symbol_locks = SymbolLockManager()
         self.symbol_equivalence_map = {}  # Cache equivalent symbols
         # Exchange-specific reader-writer locks for better concurrency (keep for legacy compatibility)
+        self.dirty_symbols = set()  # (exchange, symbol) tuples
+        self.dirty_symbols_lock = threading.Lock()
+
         self.exchange_rw_locks = {
             'binance': ReaderWriterLock(),
             'bybit': ReaderWriterLock(),
@@ -488,6 +491,11 @@ class DataStore:
         # Add spreads data structure
         self.spreads = {'binance': {}, 'bybit': {}, 'okx': {}}
         self.spread_timestamp = 0
+
+    def mark_symbol_dirty(self, exchange, symbol):
+        """Mark a symbol as needing spread recalculation"""
+        with self.dirty_symbols_lock:
+            self.dirty_symbols.add((exchange, symbol))
 
     def update_related_prices(self, exchange, future_symbol, future_data, spot_symbol=None, spot_data=None):
         """Update futures and spot data atomically using symbol-level locks"""
@@ -536,80 +544,110 @@ class DataStore:
                 write_lock.__exit__(None, None, None)
 
     def calculate_all_spreads(self):
-        """Pre-calculate spreads using per-symbol locks for better concurrency"""
+        """Calculate spreads only for symbols that have been updated"""
         current_time = time.time()
 
-        # Take snapshots of all symbols from all exchanges
+        # Get dirty symbols and clear the set
+        with self.dirty_symbols_lock:
+            if not self.dirty_symbols:
+                return  # Nothing to update
+            symbols_to_process = self.dirty_symbols.copy()
+            self.dirty_symbols.clear()
+
+        # Take snapshots only for exchanges that have dirty symbols
+        affected_exchanges = set(exchange for exchange, symbol in symbols_to_process)
         exchange_snapshots = {}
         
-        for exchange in list(self.price_data.keys()):
+        for exchange in affected_exchanges:
             exchange_snapshots[exchange] = {}
             
             # Get list of symbols for this exchange
             with self.exchange_locks[exchange]:
-                symbols_to_process = list(self.price_data[exchange].keys())
+                all_symbols = list(self.price_data[exchange].keys())
             
-            # Take snapshot of each symbol individually
-            for symbol in symbols_to_process:
+            # Take snapshot of ALL symbols from affected exchanges
+            # (needed because cross-exchange comparisons require full data)
+            for symbol in all_symbols:
                 symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
                 with symbol_lock:  # Read lock
                     symbol_data = self.price_data[exchange].get(symbol, {})
                     if symbol_data:
                         exchange_snapshots[exchange][symbol] = symbol_data.copy()
 
-        # Compute spreads on the snapshots (no locks needed)
-        for exchange in exchange_snapshots:
+        # Calculate spreads only for dirty symbols
+        for exchange, dirty_symbol in symbols_to_process:
+            if exchange not in exchange_snapshots:
+                continue
+                
             local_book = exchange_snapshots[exchange]
+            if dirty_symbol not in local_book:
+                continue
+                
+            # Skip spot symbols - they don't have their own spreads
+            if dirty_symbol.endswith('_SPOT'):
+                continue
+                
+            fut = local_book[dirty_symbol]
+            bid, ask = fut.get("bid"), fut.get("ask")
+            if bid is None or ask is None:
+                continue
+
+            # Calculate spreads for this specific symbol
             spreads_for_exch = self.spreads.setdefault(exchange, {})
 
-            for symbol, fut in local_book.items():
-                if symbol.endswith('_SPOT'):
-                    continue                         # skip spot rows
+            # vs-spot calculation
+            spot_key = f"{dirty_symbol}_SPOT"
+            spot_data = local_book.get(spot_key, {})
+            vs_spot = self._calculate_spread(
+                fut, spot_data,
+                exchange, dirty_symbol,
+                exchange, spot_key
+            )
 
-                bid, ask = fut.get("bid"), fut.get("ask")
-                if bid is None or ask is None:
-                    continue                         # incomplete quote
-
-                # ↔ vs-spot
-                spot_key  = f"{symbol}_SPOT"
-                spot_data = local_book.get(spot_key, {})
-                vs_spot   = self._calculate_spread(
-                    fut, spot_data,
-                    exchange, symbol,        # futures side
-                    exchange, spot_key       # spot side
-                )
-
-                # ↔ vs other exchanges
-                vs_binance = vs_bybit = vs_okx = 'N/A'
-                for other in ("binance", "bybit", "okx"):
-                    if other == exchange:
-                        continue
-                    equiv = self.find_equivalent_symbol(exchange, symbol, other)
-                    if not equiv:
-                        continue
+            # vs other exchanges
+            vs_binance = vs_bybit = vs_okx = 'N/A'
+            for other in ("binance", "bybit", "okx"):
+                if other == exchange:
+                    continue
                     
-                    # Use snapshot instead of direct access to avoid race conditions
-                    other_data = exchange_snapshots.get(other, {}).get(equiv, {})
-                    if "bid" in other_data and "ask" in other_data:
-                        spread = self._calculate_spread(
-                            fut, other_data,
-                            exchange, symbol,
-                            other, equiv
-                        )
-                        if   other == "binance": vs_binance = spread
-                        elif other == "bybit":   vs_bybit   = spread
-                        elif other == "okx":     vs_okx     = spread
+                # Get snapshots for other exchanges if needed
+                if other not in exchange_snapshots:
+                    exchange_snapshots[other] = {}
+                    with self.exchange_locks[other]:
+                        other_symbols = list(self.price_data[other].keys())
+                    for symbol in other_symbols:
+                        symbol_lock = self.symbol_locks.get_lock(other, symbol)
+                        with symbol_lock:
+                            symbol_data = self.price_data[other].get(symbol, {})
+                            if symbol_data:
+                                exchange_snapshots[other][symbol] = symbol_data.copy()
+                
+                equiv = self.find_equivalent_symbol(exchange, dirty_symbol, other)
+                if not equiv:
+                    continue
+                
+                other_data = exchange_snapshots.get(other, {}).get(equiv, {})
+                if "bid" in other_data and "ask" in other_data:
+                    spread = self._calculate_spread(
+                        fut, other_data,
+                        exchange, dirty_symbol,
+                        other, equiv
+                    )
+                    if   other == "binance": vs_binance = spread
+                    elif other == "bybit":   vs_bybit   = spread
+                    elif other == "okx":     vs_okx     = spread
 
-                # store results
-                spreads_for_exch[symbol] = {
-                    "vs_spot":    vs_spot,
-                    "vs_binance": vs_binance,
-                    "vs_bybit":   vs_bybit,
-                    "vs_okx":     vs_okx,
-                    "timestamp":  current_time,
-                }
+            # Store results for this symbol
+            spreads_for_exch[dirty_symbol] = {
+                "vs_spot":    vs_spot,
+                "vs_binance": vs_binance,
+                "vs_bybit":   vs_bybit,
+                "vs_okx":     vs_okx,
+                "timestamp":  current_time,
+            }
 
         self.spread_timestamp = current_time
+
 
     def _calculate_spread(self, price1, price2, exchange1=None, symbol1=None, exchange2=None, symbol2=None):
         """Calculate spread with different staleness thresholds for futures vs spot"""
@@ -803,7 +841,7 @@ class DataStore:
                 data['last'] = last
                 
             self.price_data[exchange][symbol].update(data)
-        
+        self.mark_symbol_dirty(exchange, symbol)
         # Update counter separately to minimize lock contention
         with self.exchange_locks[exchange]:
             self.update_counters[exchange] += 1

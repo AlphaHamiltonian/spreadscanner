@@ -37,7 +37,7 @@ def run_spread_calculator():
             logger.error(f"Error calculating spreads: {e}")
         
         # Calculate 5 times per second
-        time.sleep(0.2)
+        time.sleep(0.5)
 
 #---------------------------------------------
 # Headless Mode Functions
