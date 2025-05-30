@@ -798,7 +798,7 @@ class ExchangeMonitorApp:
             if self.filter_var.get():
                 status_text += f" (filtered by '{self.filter_var.get().upper()}')"
                 
-            logger.info(status_text)
+            #logger.info(status_text)
         except Exception as e:
             logger.error(f"Error updating {table_id} table with data: {e}")
 

@@ -273,9 +273,6 @@ class BybitConnector(BaseExchangeConnector):
                                     bid_qty=bid_qty, ask_qty=ask_qty, last=mid_price
                                 )
                                     
-                                # Log occasionally for verification
-                                if random.random() < 0.001:
-                                    logger.info(f"Bybit spot orderbook {spot_symbol} -> {future_symbol}: Bid={bid_price}, Ask={ask_price}")
             except Exception as e:
                 logger.error(f"Error processing Bybit spot orderbook message: {e}")
                 import traceback

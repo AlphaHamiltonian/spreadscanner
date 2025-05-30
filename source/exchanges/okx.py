@@ -352,13 +352,13 @@ class OkxConnector(BaseExchangeConnector):
                     # Only correct if reference price also confirms the issue
                     if (0.05 < reference_ratio < 0.15):
                         corrected = price * 10
-                        logger.info(f"Correcting OKX price for {symbol} {side} (confirmed by reference): {price} -> {corrected}")
+                        #logger.info(f"Correcting OKX price for {symbol} {side} (confirmed by reference): {price} -> {corrected}")
                         self.correction_history[history_key]['last_correction_time'] = current_time
                         self.correction_history[history_key]['correction_count'] += 1
                         return corrected
                     elif (8 < reference_ratio < 12):
                         corrected = price / 10
-                        logger.info(f"Correcting OKX price for {symbol} {side} (confirmed by reference): {price} -> {corrected}")
+                        #logger.info(f"Correcting OKX price for {symbol} {side} (confirmed by reference): {price} -> {corrected}")
                         self.correction_history[history_key]['last_correction_time'] = current_time
                         self.correction_history[history_key]['correction_count'] += 1
                         return corrected

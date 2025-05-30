@@ -376,6 +376,7 @@ class BinanceConnector(BaseExchangeConnector):
         """Schedule spot reconnection with backoff."""
         if self.spot_reconnect_attempts >= self.max_reconnect_attempts:
             logger.error("Max spot reconnection attempts reached")
+            self.spot_reconnect_attempts = 0  # ADD THIS LINE
             return
             
         delay = min(60, self.reconnect_cooldown * (2 ** self.spot_reconnect_attempts))

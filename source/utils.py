@@ -901,6 +901,25 @@ class DataStore:
                         data = self.price_data[exchange][symbol]
                         if 'timestamp' in data and current_time - data['timestamp'] > max_age:
                             del self.price_data[exchange][symbol]
+        with self.lock:
+            # Clean threshold timestamps older than 10 minutes
+            for key in list(self.threshold_timestamps.keys()):
+                self.threshold_timestamps[key] = [
+                    ts for ts in self.threshold_timestamps[key] 
+                    if current_time - ts <= 600
+                ]
+                if not self.threshold_timestamps[key]:
+                    del self.threshold_timestamps[key]
+            
+            # Clean notification times older than 2 hours
+            old_keys = [k for k, v in self.last_notification_time.items() if current_time - v > 7200]
+            for key in old_keys:
+                del self.last_notification_time[key]
+                
+            old_keys = [k for k, v in self.last_funding_notif_time.items() if current_time - v > 7200]
+            for key in old_keys:
+                del self.last_funding_notif_time[key]
+
 
     def check_data_freshness(self):
         """Check if data is fresh and log warnings if not"""
