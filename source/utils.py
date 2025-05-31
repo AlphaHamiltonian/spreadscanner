@@ -10,7 +10,7 @@ from source.config import Config
 from source.action import send_message, send_trade
 import threading
 from threading import RLock
-
+from source.alerts import alert_manager
 
 class ReaderWriterLock:
     """Allows multiple concurrent readers or one exclusive writer"""
@@ -457,9 +457,6 @@ class DataStore:
     def __init__(self):
         # Keep original global lock for backward compatibility and operations affecting multiple symbols
         self.lock = threading.RLock()
-        self.threshold_timestamps = {}  # Track when thresholds are exceeded for each asset pair
-        self.last_notification_time = {}  # Track when the last notification was sent
-        self.last_funding_notif_time = {}  # (exchange,symbol) → last-sent epoch
         # Per-symbol lock manager for high-frequency price updates
         self.symbol_locks = SymbolLockManager()
         self.symbol_equivalence_map = {}  # Cache equivalent symbols
@@ -716,44 +713,7 @@ class DataStore:
         
         # Express as percentage
         spread_pct = avg_ratio * 100
-        if spread_pct > Config.UPPER_LIMIT or spread_pct < Config.LOWER_LIMIT:
-            # Create a unique key for this asset pair
-            asset_pair_key = f"{source1}_vs_{source2}"
-            
-            # Get current time
-            current_time = time.time()
-            
-            # Initialize timestamp list for this asset pair if it doesn't exist
-            if asset_pair_key not in self.threshold_timestamps:
-                self.threshold_timestamps[asset_pair_key] = []
-            
-            # Add current timestamp to the list
-            self.threshold_timestamps[asset_pair_key].append(current_time)
-            
-            # Remove timestamps older than 5 seconds
-            self.threshold_timestamps[asset_pair_key] = [ts for ts in self.threshold_timestamps[asset_pair_key] 
-                                                    if current_time - ts <= Config.DELETE_OLD_TIME]
-            
-            # Count unique seconds in the timestamp list
-            unique_seconds = set(int(ts) for ts in self.threshold_timestamps[asset_pair_key])
-            
-            # Check if notification criteria are met:
-            # 1. At least 2 unique seconds in the past 5 seconds
-            # 2. No notification sent in the past 30 minutes for this asset pair
-            last_notif_time = self.last_notification_time.get(asset_pair_key, 0)
-            
-            if len(unique_seconds) >= Config.NUMBER_OF_SEC_THRESHOLD_TRADE and current_time - last_notif_time > 1800:  # 30 minutes = 1800 seconds
-                if spread_pct > Config.UPPER_LIMIT:
-                    notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% above upper limit ({Config.UPPER_LIMIT}%)"
-                else:  # spread_pct < LOWER_LIMIT
-                    notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% below lower limit ({Config.LOWER_LIMIT}%)"
-                if exchange1==exchange2 and exchange1 == "binance":
-                    send_trade(f"mock trade: {notification_message}")
-                    if len(unique_seconds) >= Config.NUMBER_OF_SEC_THRESHOLD:
-                        success = send_message(notification_message)    
-                        if success:
-                            self.last_notification_time[asset_pair_key] = current_time
-                            logger.info(f"Notification sent for {asset_pair_key}. Next notification in 30 minutes.")
+        alert_manager.check_spread_alert(spread_pct, source1, source2, exchange1, exchange2)
         return spread_pct
 
     def get_spread(self, exchange, symbol, spread_type='vs_spot'):
@@ -877,18 +837,7 @@ class DataStore:
             except (ValueError, TypeError):
                 return                               
             # --- 3. alert logic -----------------------------------------------------
-            if abs(r) >= Config.FUNDING_RATE_THRESHOLD:         
-                key, now = (exchange, symbol), time.time()
-                if now - self.last_funding_notif_time.get(key, 0) < 1800:
-                    return                                   # still in 30-min cool-down
-
-                direction = "positive" if r > 0 else "negative"
-                pct = r                               # back to % for display
-                msg = f"⚠️ Funding rate alert\n{exchange}:{symbol} → {pct:.2f}% ({direction})"
-
-                if send_message(msg):
-                    self.last_funding_notif_time[key] = now
-                    logger.info("Funding alert sent for %s. Next in 30 min.", key)
+            alert_manager.check_funding_alert(exchange, symbol, rate)
 
     def get_funding_rate(self, exchange, symbol):
         symbol_lock = self.symbol_locks.get_lock(exchange, symbol)
@@ -912,24 +861,7 @@ class DataStore:
                         data = self.price_data[exchange][symbol]
                         if 'timestamp' in data and current_time - data['timestamp'] > max_age:
                             del self.price_data[exchange][symbol]
-        with self.lock:
-            # Clean threshold timestamps older than 10 minutes
-            for key in list(self.threshold_timestamps.keys()):
-                self.threshold_timestamps[key] = [
-                    ts for ts in self.threshold_timestamps[key] 
-                    if current_time - ts <= 600
-                ]
-                if not self.threshold_timestamps[key]:
-                    del self.threshold_timestamps[key]
-            
-            # Clean notification times older than 2 hours
-            old_keys = [k for k, v in self.last_notification_time.items() if current_time - v > 7200]
-            for key in old_keys:
-                del self.last_notification_time[key]
-                
-            old_keys = [k for k, v in self.last_funding_notif_time.items() if current_time - v > 7200]
-            for key in old_keys:
-                del self.last_funding_notif_time[key]
+        alert_manager.cleanup_old_data()
 
 
     def check_data_freshness(self):
