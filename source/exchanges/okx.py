@@ -250,13 +250,6 @@ class OkxConnector(BaseExchangeConnector):
             
         try:
             current_time = time.time()
-            
-            # Check connection age (force periodic reconnect)
-            connection_age = current_time - self.okx_connection_time
-            if connection_age > 3600:  # 1 hour
-                logger.info(f"Performing scheduled OKX reconnection after {connection_age:.1f}s")
-                self._safe_reconnect("futures")
-                return
                 
             # Check for recent data
             data_age = current_time - self.okx_last_data_time
