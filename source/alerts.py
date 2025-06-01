@@ -65,7 +65,7 @@ class AlertManager:
             key = (exchange, symbol)
             now = time.time()
             
-            if now - self.last_funding_notif_time.get(key, 0) < 1800:
+            if now - self.last_funding_notif_time.get(key, 0) < 3000:
                 return
             
             direction = "positive" if r > 0 else "negative"
