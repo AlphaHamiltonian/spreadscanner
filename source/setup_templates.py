@@ -6,9 +6,14 @@ Run this to set up the entire template structure
 
 import json
 from pathlib import Path
+import sys
 
-def create_templates():
-    """Create all template files with proper structure"""
+def create_templates(overwrite=False):
+    """Create all template files with proper structure
+    
+    Args:
+        overwrite: If True, overwrites existing files. If False, skips existing files.
+    """
     
     # Base directory
     base_dir = Path("source/config_templates")
@@ -127,12 +132,22 @@ def create_templates():
     
     # Create all template files
     created_count = 0
+    updated_count = 0
+    skipped_count = 0
+    
     for filename, content in templates.items():
         filepath = base_dir / filename
         
         # Check if file already exists
         if filepath.exists():
-            print(f"⚠️  Exists: {filepath}")
+            if overwrite:
+                with open(filepath, 'w') as f:
+                    json.dump(content, f, indent=4)
+                print(f"📝 Updated: {filepath}")
+                updated_count += 1
+            else:
+                print(f"⏭️  Skipped: {filepath} (already exists)")
+                skipped_count += 1
         else:
             with open(filepath, 'w') as f:
                 json.dump(content, f, indent=4)
@@ -142,7 +157,8 @@ def create_templates():
     print(f"\n📊 Summary:")
     print(f"   Total templates: {len(templates)}")
     print(f"   Created: {created_count}")
-    print(f"   Already existed: {len(templates) - created_count}")
+    print(f"   Updated: {updated_count}")
+    print(f"   Skipped: {skipped_count}")
     print(f"\n📁 Templates location: {base_dir.absolute()}")
     
     # Verify all files exist and are valid JSON
@@ -170,7 +186,25 @@ def create_templates():
 
 if __name__ == "__main__":
     print("=== TEMPLATE SETUP ===\n")
-    template_dir = create_templates()
+    
+    # Check for command line arguments
+    overwrite = False
+    if len(sys.argv) > 1:
+        if sys.argv[1] in ['--overwrite', '-o', '--force', '-f']:
+            overwrite = True
+            print("🔄 Overwrite mode: ENABLED\n")
+        elif sys.argv[1] in ['--help', '-h']:
+            print("Usage: python setup_templates.py [OPTIONS]")
+            print("\nOptions:")
+            print("  --overwrite, -o, --force, -f    Overwrite existing template files")
+            print("  --help, -h                      Show this help message")
+            print("\nBy default, existing files are preserved.")
+            sys.exit(0)
+    else:
+        print("ℹ️  Preserve mode: Existing files will be skipped")
+        print("   Use --overwrite to update existing files\n")
+    
+    template_dir = create_templates(overwrite=overwrite)
     
     print("\n📝 Next steps:")
     print("1. Copy the new actionToJSON.py to your source directory")
