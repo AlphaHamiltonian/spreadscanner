@@ -1,0 +1,8 @@
+{
+    "comments": "HLimit 1",
+    "configName": "HLimit1 - 2sec",
+    "orderType": 1,
+    "cutlossTimeout": 3000,
+    "cutlossBPS": 50,
+    "delayHedgeTime": 2000
+}

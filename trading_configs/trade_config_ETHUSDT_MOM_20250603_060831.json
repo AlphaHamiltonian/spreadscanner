@@ -1,0 +1,61 @@
+{
+  "request_type": "scan",
+  "id": "11662",
+  "theo_type": "FAST",
+  "trade_strategy": "SC",
+  "hedge_strategy": "HMomentum",
+  "trade_account": "bin_10",
+  "hedge_account": "bin_10",
+  "trade_times": "0",
+  "offset_bid": "0",
+  "offset_ask": "0",
+  "bid_qty": "0",
+  "ask_qty": "0",
+  "auto_hedge": "Yes",
+  "theo_config": {
+    "comments": "Momentum config for ETHUSDT",
+    "configName": "FAST-MOM-0",
+    "checkTickersFrequency": 30000,
+    "underlyingAssets": {
+      "assetSymbol": "ETHUSDT",
+      "assetExchange": "BIN_FUTURES",
+      "currencySymbol": "",
+      "currencyExchange": "",
+      "hedgeAsset": "no",
+      "hedgeCurrency": "no",
+      "minSizeOrderAsset": "6u",
+      "minSizeOrderCurrency": "0"
+    },
+    "tradeAsset": {
+      "assetSymbol": "ETHUSDT",
+      "assetExchange": "BIN_FUTURES",
+      "minSizeOrder": "6u",
+      "currencyType": "Divide"
+    }
+  },
+  "trade_config": {
+    "comments": "Config file for SC",
+    "configName": "SC-0",
+    "orderType": 0,
+    "spikeCheckTime": 0,
+    "autoSizing": "no",
+    "maxQty": 0,
+    "minQty": 0
+  },
+  "hedge_config": {
+    "comments": "Config file for HMomentum",
+    "configName": "HMomentum BPS",
+    "icebergParts": 1,
+    "delayHedgeTime": 0,
+    "trailingStop": "150b",
+    "trailingStep": "5b",
+    "trailingLimit": "20b",
+    "takeProfitTrigger": 100,
+    "takeProfitTrailingStop": "5b"
+  },
+  "metadata": {
+    "generated_at": "2025-06-03 06:08:31",
+    "strategy": "momentum",
+    "spread_pct": "2.5"
+  }
+}

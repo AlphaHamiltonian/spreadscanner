@@ -1,0 +1,58 @@
+{
+  "request_type": "scan",
+  "id": "11661",
+  "theo_type": "FAST",
+  "trade_strategy": "SC",
+  "hedge_strategy": "HLimit",
+  "trade_account": "bin_spot_10",
+  "hedge_account": "bin_10",
+  "trade_times": "0",
+  "offset_bid": "0",
+  "offset_ask": "0",
+  "bid_qty": "0",
+  "ask_qty": "0",
+  "auto_hedge": "Yes",
+  "theo_config": {
+    "comments": "Trade BTCUSDT_SPOT hedge BTCUSDT",
+    "configName": "FAST-SPOT-0",
+    "checkTickersFrequency": 30000,
+    "underlyingAssets": {
+      "assetSymbol": "BTCUSDT",
+      "assetExchange": "BIN_FUTURES",
+      "currencySymbol": "",
+      "currencyExchange": "",
+      "hedgeAsset": "yes",
+      "hedgeCurrency": "no",
+      "minSizeOrderAsset": "6u",
+      "minSizeOrderCurrency": "0"
+    },
+    "tradeAsset": {
+      "assetSymbol": "BTCUSDT",
+      "assetExchange": "BIN_SPOT",
+      "minSizeOrder": "6u",
+      "currencyType": "Divide"
+    }
+  },
+  "trade_config": {
+    "comments": "Config file for SC",
+    "configName": "SC-0",
+    "orderType": 0,
+    "spikeCheckTime": 0,
+    "autoSizing": "no",
+    "maxQty": 0,
+    "minQty": 0
+  },
+  "hedge_config": {
+    "comments": "HLimit 1",
+    "configName": "HLimit1 - 2sec",
+    "orderType": 1,
+    "cutlossTimeout": 3000,
+    "cutlossBPS": 50,
+    "delayHedgeTime": 2000
+  },
+  "metadata": {
+    "generated_at": "2025-06-03 06:08:31",
+    "strategy": "spread_trade_spot",
+    "spread_pct": "0.85"
+  }
+}

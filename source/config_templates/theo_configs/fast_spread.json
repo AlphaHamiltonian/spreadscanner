@@ -1,0 +1,21 @@
+{
+    "comments": "{theo_comment}",
+    "configName": "{theo_config_name}",
+    "checkTickersFrequency": 30000,
+    "underlyingAssets": {
+        "assetSymbol": "{asset_symbol}",
+        "assetExchange": "{asset_exchange}",
+        "currencySymbol": "{currency_symbol}",
+        "currencyExchange": "{currency_exchange}",
+        "hedgeAsset": "yes",
+        "hedgeCurrency": "{hedge_currency}",
+        "minSizeOrderAsset": "6u",
+        "minSizeOrderCurrency": "6u"
+    },
+    "tradeAsset": {
+        "assetSymbol": "{trade_symbol}",
+        "assetExchange": "{trade_exchange}",
+        "minSizeOrder": "6u",
+        "currencyType": "Divide"
+    }
+}

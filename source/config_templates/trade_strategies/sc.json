@@ -1,0 +1,9 @@
+{
+    "comments": "Config file for SC",
+    "configName": "SC-{counter}",
+    "orderType": 0,
+    "spikeCheckTime": 0,
+    "autoSizing": "no",
+    "maxQty": 0,
+    "minQty": 0
+}

@@ -1,0 +1,21 @@
+{
+    "comments": "Momentum config for {symbol}",
+    "configName": "FAST-MOM-{counter}",
+    "checkTickersFrequency": 30000,
+    "underlyingAssets": {
+        "assetSymbol": "{symbol}",
+        "assetExchange": "{exchange}",
+        "currencySymbol": "",
+        "currencyExchange": "",
+        "hedgeAsset": "no",
+        "hedgeCurrency": "no",
+        "minSizeOrderAsset": "6u",
+        "minSizeOrderCurrency": "0"
+    },
+    "tradeAsset": {
+        "assetSymbol": "{symbol}",
+        "assetExchange": "{exchange}",
+        "minSizeOrder": "6u",
+        "currencyType": "Divide"
+    }
+}
