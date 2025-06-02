@@ -466,7 +466,22 @@ class DataStore:
         # Add spreads data structure
         self.spreads = {'binance': {}, 'bybit': {}, 'okx': {}}
         self.spread_timestamp = 0
-
+    def update_symbol_maps(self):
+        """Update normalized symbol maps for all exchanges"""
+        with self.lock:
+            # Clear existing maps
+            for exchange in self.symbol_maps:
+                self.symbol_maps[exchange] = {}
+                
+            # Create normalized to original symbol mappings
+            for exchange in self.symbols:
+                for symbol in self.symbols[exchange]:
+                    normalized = symbol_matcher.normalize_symbol(exchange, symbol)
+                    self.symbol_maps[exchange][normalized] = symbol
+            
+            # CHANGE: Clear the new cache when symbols change
+            self.symbol_equivalence_map.clear()
+            self.equivalent_symbols = {}  # Keep clearing old cache for compatibility
     def mark_symbol_dirty(self, exchange, symbol):
         """Mark a symbol as needing spread recalculation"""
         with self.dirty_symbols_lock:

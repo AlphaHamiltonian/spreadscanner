@@ -9,6 +9,7 @@ from source.config import stop_event
 import time
 from source.exchanges.base import BaseExchangeConnector
 from source.utils import data_store, WebSocketManager, WriteLock
+from source.symbol_matcher import symbol_matcher
 
 logger = logging.getLogger(__name__) # module-specific logger
 
