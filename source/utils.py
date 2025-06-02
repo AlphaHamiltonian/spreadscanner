@@ -11,6 +11,7 @@ from source.action import send_message, send_trade
 import threading
 from threading import RLock
 from source.alerts import alert_manager
+from source.symbol_matcher import symbol_matcher
 
 class ReaderWriterLock:
     """Allows multiple concurrent readers or one exclusive writer"""
@@ -427,30 +428,6 @@ class HttpSessionManager:
             logger.error(f"{self.name} HTTP GET exception: {url} - {e}")
             return None
 
-class SymbolNormalizer:
-    """Normalizes symbols across exchanges with caching for performance."""
-    _cache = {}  # Class-level cache
-    
-    @classmethod
-    def normalize_symbol(cls, exchange, symbol):
-        """Normalize symbols with caching for performance"""
-        cache_key = f"{exchange}:{symbol}"
-        
-        if cache_key in cls._cache:
-            return cls._cache[cache_key]
-            
-        # Perform normalization
-        result = None
-        if exchange == 'okx' and '-SWAP' in symbol:
-            result = symbol.replace('-SWAP', '').replace('-', '')
-        elif exchange == 'bybit' and '-' in symbol:
-            result = symbol.replace('-', '')
-        else:
-            result = symbol
-            
-        # Cache the result
-        cls._cache[cache_key] = result
-        return result
 
 class DataStore:
     """Centralized data store with per-symbol thread-safe operations."""
@@ -572,7 +549,7 @@ class DataStore:
             # Add equivalent symbols from other exchanges
             for other in ['binance', 'bybit', 'okx']:
                 if other != exchange:
-                    equiv = self.find_equivalent_symbol(exchange, symbol, other)
+                    equiv = symbol_matcher.find_equivalent_symbol(exchange, symbol, other)
                     if equiv:
                         if other not in required_symbols:
                             required_symbols[other] = set()
@@ -632,7 +609,7 @@ class DataStore:
                 if other == exchange:
                     continue
                 
-                equiv = self.find_equivalent_symbol(exchange, dirty_symbol, other)
+                equiv = symbol_matcher.find_equivalent_symbol(exchange, dirty_symbol, other)
                 if not equiv:
                     continue
                 
@@ -737,58 +714,6 @@ class DataStore:
         with self.exchange_locks[exchange]:  # Read lock for specific exchange
             return self.symbols[exchange].copy()
 
-    def update_symbol_maps(self):
-        """Update normalized symbol maps for all exchanges"""
-        with self.lock:
-            # Clear existing maps
-            for exchange in self.symbol_maps:
-                self.symbol_maps[exchange] = {}
-                
-            # Create normalized to original symbol mappings
-            for exchange in self.symbols:
-                for symbol in self.symbols[exchange]:
-                    normalized = self.normalize_symbol(exchange, symbol)
-                    self.symbol_maps[exchange][normalized] = symbol
-            
-            # CHANGE: Clear the new cache when symbols change
-            self.symbol_equivalence_map.clear()
-            self.equivalent_symbols = {}  # Keep clearing old cache for compatibility
-
-    def normalize_symbol(self, exchange, symbol):
-        """Get normalized symbol with caching"""
-        cache_key = f"{exchange}:{symbol}"
-        
-        if cache_key not in self.normalized_cache:
-            self.normalized_cache[cache_key] = SymbolNormalizer.normalize_symbol(exchange, symbol)
-            
-        return self.normalized_cache[cache_key]
-
-    def find_equivalent_symbol(self, source_exchange, source_symbol, target_exchange):
-        """Find equivalent symbol in target exchange with optimized caching"""
-        # Use tuple-based cache key (faster than string)
-        cache_key = (source_exchange, source_symbol, target_exchange)
-        
-        # Return from cache if available
-        if cache_key in self.symbol_equivalence_map:
-            return self.symbol_equivalence_map[cache_key]
-        
-        # Get normalized version of source symbol
-        normalized_source = self.normalize_symbol(source_exchange, source_symbol)
-        
-        # Look for matching symbol in target exchange
-        # CHANGE: Use exchange-specific lock instead of global lock
-        with self.exchange_locks[target_exchange]:
-            target_symbols = self.symbols[target_exchange]
-            for target_symbol in target_symbols:
-                normalized_target = self.normalize_symbol(target_exchange, target_symbol)
-                if normalized_source == normalized_target:
-                    # Store in cache and return
-                    self.symbol_equivalence_map[cache_key] = target_symbol
-                    return target_symbol
-        
-        # No match found - cache the miss too
-        self.symbol_equivalence_map[cache_key] = None
-        return None
 
     def update_price_direct(self, exchange, symbol, bid, ask, bid_qty=None, ask_qty=None, last=None):
         """Direct price update with per-symbol locking for maximum concurrency"""

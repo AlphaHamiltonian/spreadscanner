@@ -7,6 +7,7 @@ from source.config import stop_event
 import time
 from source.exchanges.base import BaseExchangeConnector
 from source.utils import data_store, WebSocketManager, WriteLock
+from source.symbol_matcher import symbol_matcher
 
 logger = logging.getLogger(__name__) # module-specific logger
 
@@ -328,7 +329,7 @@ class OkxConnector(BaseExchangeConnector):
             # Get reference prices from other exchanges if available
             reference_price = None
             for exchange in ['binance', 'bybit']:
-                equiv_symbol = data_store.find_equivalent_symbol('okx', symbol, exchange)
+                equiv_symbol = symbol_matcher.find_equivalent_symbol('okx', symbol, exchange)
                 if equiv_symbol:
                     other_data = data_store.get_price_data(exchange, equiv_symbol)
                     if other_data and side in other_data:
