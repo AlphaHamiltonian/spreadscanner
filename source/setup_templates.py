@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""
+Complete setup script to create all template files
+Run this to set up the entire template structure
+"""
+
+import json
+from pathlib import Path
+
+def create_templates():
+    """Create all template files with proper structure"""
+    
+    # Base directory
+    base_dir = Path("source/config_templates")
+    base_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create subdirectories
+    (base_dir / "hedge_strategies").mkdir(exist_ok=True)
+    (base_dir / "trade_strategies").mkdir(exist_ok=True)
+    (base_dir / "theo_configs").mkdir(exist_ok=True)
+    
+    # Template definitions
+    templates = {
+        # Main base template that references other templates
+        "base.json": {
+            "request_type": "scan",
+            "id": "{id}",
+            "theo_type": "{theo_type}",
+            "trade_strategy": "{trade_strategy}",
+            "hedge_strategy": "{hedge_strategy}",
+            "trade_account": "{trade_account}",
+            "hedge_account": "{hedge_account}",
+            "trade_times": "0",
+            "offset_bid": "0",
+            "offset_ask": "0",
+            "bid_qty": "0",
+            "ask_qty": "0",
+            "auto_hedge": "Yes",
+            "theo_config": "@theo_configs/{theo_config_file}",
+            "trade_config": "@trade_strategies/{trade_config_file}",
+            "hedge_config": "@hedge_strategies/{hedge_config_file}",
+            "metadata": {
+                "generated_at": "{timestamp}",
+                "strategy": "{strategy_type}",
+                "spread_pct": "{spread_pct}"
+            }
+        },
+        
+        # Theo configurations
+        "theo_configs/fast_spread.json": {
+            "comments": "{theo_comment}",
+            "configName": "{theo_config_name}",
+            "checkTickersFrequency": 30000,
+            "underlyingAssets": {
+                "assetSymbol": "{asset_symbol}",
+                "assetExchange": "{asset_exchange}",
+                "currencySymbol": "{currency_symbol}",
+                "currencyExchange": "{currency_exchange}",
+                "hedgeAsset": "yes",
+                "hedgeCurrency": "{hedge_currency}",
+                "minSizeOrderAsset": "6u",
+                "minSizeOrderCurrency": "{min_size_currency}"
+            },
+            "tradeAsset": {
+                "assetSymbol": "{trade_symbol}",
+                "assetExchange": "{trade_exchange}",
+                "minSizeOrder": "6u",
+                "currencyType": "Divide"
+            }
+        },
+        
+        "theo_configs/fast_momentum.json": {
+            "comments": "Momentum config for {symbol}",
+            "configName": "FAST-MOM-{counter}",
+            "checkTickersFrequency": 30000,
+            "underlyingAssets": {
+                "assetSymbol": "{symbol}",
+                "assetExchange": "{exchange}",
+                "currencySymbol": "",
+                "currencyExchange": "",
+                "hedgeAsset": "no",
+                "hedgeCurrency": "no",
+                "minSizeOrderAsset": "6u",
+                "minSizeOrderCurrency": "0"
+            },
+            "tradeAsset": {
+                "assetSymbol": "{symbol}",
+                "assetExchange": "{exchange}",
+                "minSizeOrder": "6u",
+                "currencyType": "Divide"
+            }
+        },
+        
+        # Hedge strategies
+        "hedge_strategies/hlimit.json": {
+            "comments": "HLimit 1",
+            "configName": "HLimit1 - 2sec",
+            "orderType": 1,
+            "cutlossTimeout": 3000,
+            "cutlossBPS": 50,
+            "delayHedgeTime": 2000
+        },
+        
+        "hedge_strategies/hmomentum.json": {
+            "comments": "Config file for HMomentum",
+            "configName": "HMomentum BPS",
+            "icebergParts": 1,
+            "delayHedgeTime": 0,
+            "trailingStop": "150b",
+            "trailingStep": "5b",
+            "trailingLimit": "20b",
+            "takeProfitTrigger": 100,
+            "takeProfitTrailingStop": "5b"
+        },
+        
+        # Trade strategies
+        "trade_strategies/sc.json": {
+            "comments": "Config file for SC",
+            "configName": "SC-{counter}",
+            "orderType": 0,
+            "spikeCheckTime": 0,
+            "autoSizing": "no",
+            "maxQty": 0,
+            "minQty": 0
+        }
+    }
+    
+    # Create all template files
+    created_count = 0
+    for filename, content in templates.items():
+        filepath = base_dir / filename
+        
+        # Check if file already exists
+        if filepath.exists():
+            print(f"⚠️  Exists: {filepath}")
+        else:
+            with open(filepath, 'w') as f:
+                json.dump(content, f, indent=4)
+            print(f"✅ Created: {filepath}")
+            created_count += 1
+    
+    print(f"\n📊 Summary:")
+    print(f"   Total templates: {len(templates)}")
+    print(f"   Created: {created_count}")
+    print(f"   Already existed: {len(templates) - created_count}")
+    print(f"\n📁 Templates location: {base_dir.absolute()}")
+    
+    # Verify all files exist and are valid JSON
+    print(f"\n🔍 Verifying templates...")
+    all_valid = True
+    for filename in templates.keys():
+        filepath = base_dir / filename
+        try:
+            with open(filepath, 'r') as f:
+                json.load(f)
+            print(f"   ✓ {filename}")
+        except FileNotFoundError:
+            print(f"   ✗ {filename} - File not found!")
+            all_valid = False
+        except json.JSONDecodeError as e:
+            print(f"   ✗ {filename} - Invalid JSON: {e}")
+            all_valid = False
+    
+    if all_valid:
+        print(f"\n✅ All templates are valid!")
+    else:
+        print(f"\n❌ Some templates have issues. Please check above.")
+    
+    return base_dir
+
+if __name__ == "__main__":
+    print("=== TEMPLATE SETUP ===\n")
+    template_dir = create_templates()
+    
+    print("\n📝 Next steps:")
+    print("1. Copy the new actionToJSON.py to your source directory")
+    print("2. Run: python source/actionToJSON.py")
+    print("3. Check the trading_configs directory for generated files")
+    
+    # Quick test to ensure actionToJSON can find templates
+    print("\n🧪 Quick test...")
+    try:
+        from pathlib import Path
+        test_file = template_dir / "base.json"
+        if test_file.exists():
+            print("✅ Template files are accessible")
+        else:
+            print("❌ Cannot find template files")
+    except Exception as e:
+        print(f"❌ Error: {e}")

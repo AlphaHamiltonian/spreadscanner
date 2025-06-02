@@ -7,8 +7,6 @@ import requests
 from collections import deque
 import random
 from source.config import Config
-from source.action import send_message, send_trade
-import threading
 from threading import RLock
 from source.alerts import alert_manager
 from source.symbol_matcher import symbol_matcher
