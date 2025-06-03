@@ -124,7 +124,7 @@ class TradingSignalServer:
         for client in disconnected_clients:
             await self.unregister_client(client)
             
-    async def handle_client(self, websocket: websockets.WebSocketServerProtocol, path: str):
+    async def handle_client(self, websocket: websockets.WebSocketServerProtocol):
         """Handle individual client connections"""
         await self.register_client(websocket)
         
