@@ -10,7 +10,8 @@ import signal
 import time
 import argparse
 from source.utils import data_store
-from source.action import send_message
+from source.action import send_message, set_broadcast_method
+from source.websocket_server import trading_signal_server
 
 
 # Disable WebSocket trace for cleaner logs
@@ -38,15 +39,40 @@ def run_spread_calculator():
         
         # Calculate 5 times per second
         time.sleep(0.5)
-
+def start_websocket_server(port=8765):
+    """Start the WebSocket server for broadcasting trading signals"""
+    try:
+        logger.info(f"Starting WebSocket server on port {port}")
+        trading_signal_server.port = port
+        trading_signal_server.run_in_thread()
+        
+        # Give server time to start
+        time.sleep(2)
+        
+        if trading_signal_server.is_running:
+            logger.info(f"WebSocket server successfully started on port {port}")
+            return True
+        else:
+            logger.error("Failed to start WebSocket server")
+            return False
+    except Exception as e:
+        logger.error(f"Error starting WebSocket server: {e}")
+        return False
 #---------------------------------------------
 # Headless Mode Functions
 #---------------------------------------------
-def run_headless():
+def run_headless(websocket_port=8765):
     """Run the application in headless mode without UI"""
 
     from source.headless import HeadlessMonitor
-    
+    # Start WebSocket server
+    if start_websocket_server(websocket_port):
+        logger.info("WebSocket server started successfully")
+        # Set broadcast method to websocket since we're in headless mode
+        set_broadcast_method("websocket")
+    else:
+        logger.warning("WebSocket server failed to start, falling back to Telegram only")
+        set_broadcast_method("telegram")    
     logger.info("Starting in headless mode...")
     
     # Set up proper signal handling
@@ -216,7 +242,8 @@ def main():
     parser.add_argument('--headless', action='store_true', 
                         help='Run in headless mode without UI (for servers)')
     args = parser.parse_args()
-    
+    # Set broadcast method
+    set_broadcast_method(args.broadcast)    
     # Run in either headless or UI mode
     if args.headless:
         config.TELEGRAM_ENABLED = True

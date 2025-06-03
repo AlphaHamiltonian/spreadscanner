@@ -1,7 +1,7 @@
 # Core networking dependencies
 requests>=2.25.1
 websocket-client>=1.2.3
-
+websockets>=15.0.1
 # Performance-optimized JSON parsing
 orjson>=3.8.0  # Used in your code instead of ujson
 plyer>=2.1.0
