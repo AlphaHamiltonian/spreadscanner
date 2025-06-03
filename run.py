@@ -248,7 +248,7 @@ def main():
                         help='Run in headless mode without UI (for servers)')
     parser.add_argument('--broadcast', 
                         choices=['telegram', 'websocket', 'both'],
-                        default='websocket',
+                        default='both',
                         help='Broadcast method for trading signals (default: websocket)')
     parser.add_argument('--websocket-port', 
                         type=int, 

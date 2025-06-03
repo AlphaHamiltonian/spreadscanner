@@ -19,18 +19,15 @@ BROADCAST_METHOD = "websocket"  # Options: "telegram", "websocket", "both"
 # --------------------------------------------------------------------------- #
 
 def send_message(message):
-    """Send a message via configured broadcast method"""
-    print(f"Sending message via {BROADCAST_METHOD}")
+    """Send a message via Telegram only (for alerts)"""
+    # Alerts always go to Telegram, not WebSocket
+    # This is different from send_trade which respects BROADCAST_METHOD
     
-    success = False
+    if not config.TELEGRAM_ENABLED:
+        print("Alert triggered but Telegram notifications are disabled.")
+        return False
     
-    if BROADCAST_METHOD in ["telegram", "both"]:
-        success = send_telegram_message(message) or success
-        
-    if BROADCAST_METHOD in ["websocket", "both"]:
-        success = send_websocket_message(message) or success
-        
-    return success
+    return send_telegram_message(message)
 
 def send_telegram_message(message):
     """Send a message via Telegram bot."""
@@ -84,46 +81,63 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct):
     """Generate trading configs and send via configured broadcast method"""
     print(f"Sending trade signal via {BROADCAST_METHOD}")
     
-    if BROADCAST_METHOD == "telegram":
-        if not config.TELEGRAM_ENABLED:
-            print("Telegram notifications are disabled.")
-            return False
-    
     try:
-        # Custom parameters for MM strategy
+        # 1. Generate configs first
         custom_params = {
-            'bid_qty': '200u',  # Change this to your desired quantity
-            'ask_qty': '200u'   # Change this to your desired quantity
+            'bid_qty': '200u',
+            'ask_qty': '200u'
         }
         
-        # Generate spread configs with MM strategy and custom quantities
         config1, config2 = generate_spread_configs_direct(
             source1, source2, exchange1, exchange2, spread_pct, 
-            strategy='MM',  # Changed from 'SC' to 'MM'
-            custom=custom_params  # Added custom parameters
+            strategy='MM',
+            custom=custom_params
         )
         
-        success = False
+        # 2. Prepare common data
+        config1_name = config1.get('theo_config', {}).get('configName', 'Config1')
+        config2_name = config2.get('theo_config', {}).get('configName', 'Config2')
         
-        # Send via Telegram if enabled
+        # 3. Track success for each method
+        telegram_success = False
+        websocket_success = False
+        
+        # 4. Handle Telegram
         if BROADCAST_METHOD in ["telegram", "both"]:
-            message = f"Trading configs generated for {source1} vs {source2} (spread: {spread_pct:.2f}%)\n\n"
-            message += f"Config 1:\n```json\n{json.dumps(config1, indent=2)}\n```\n\n"
-            message += f"Config 2:\n```json\n{json.dumps(config2, indent=2)}\n```"
-            
-            if send_telegram_message(message):
-                success = True
+            if config.TELEGRAM_ENABLED:
+                # Determine message format
+                if BROADCAST_METHOD == "both":
+                    # Short notification when using both methods
+                    message = (
+                        f"📊 Trading Signal Generated\n"
+                        f"Pair: {source1} vs {source2}\n"
+                        f"Spread: {spread_pct:.2f}%\n"
+                        f"Configs: {config1_name}, {config2_name}\n"
+                        f"Full details sent via WebSocket"
+                    )
+                else:
+                    # Full details when Telegram-only
+                    message = (
+                        f"Trading configs generated for {source1} vs {source2} "
+                        f"(spread: {spread_pct:.2f}%)\n\n"
+                        f"Config 1:\n```json\n{json.dumps(config1, indent=2)}\n```\n\n"
+                        f"Config 2:\n```json\n{json.dumps(config2, indent=2)}\n```"
+                    )
                 
-        # Send via WebSocket if enabled
+                telegram_success = send_telegram_message(message)
+            else:
+                print("Telegram broadcast requested but notifications are disabled")
+        
+        # 5. Handle WebSocket
         if BROADCAST_METHOD in ["websocket", "both"]:
-            # Queue the trading signal for WebSocket broadcast
             trading_signal_server.queue_trading_signal(
                 source1, source2, exchange1, exchange2, spread_pct, config1, config2
             )
             print("Trade signal queued for WebSocket broadcast")
-            success = True
-            
-        return success
+            websocket_success = True
+        
+        # 6. Return overall success
+        return telegram_success or websocket_success
         
     except Exception as e:
         print(f"Error generating trade configs: {e}")
