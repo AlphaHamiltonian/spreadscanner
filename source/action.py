@@ -1,6 +1,6 @@
 import requests
 from source.actionToJSON import generate_spread_configs_direct
-import orjson as json
+import json
 # --------------------------------------------------------------------------- #
 # Configuration – kept identical to your existing variable names
 # --------------------------------------------------------------------------- #
@@ -45,7 +45,7 @@ def send_message(message):
     except Exception as e:
         print(f"Error sending Telegram message: {e}")
         return False
-    
+ 
 def send_trade(source1, source2, exchange1, exchange2, spread_pct):
     print("connecting")
     """Generate trading configs and send via Telegram bot."""
@@ -65,22 +65,18 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct):
         }
         
         # Generate spread configs with MM strategy and custom quantities
-        config1_path, config2_path = generate_spread_configs_direct(
+        # This now returns dictionaries directly, not file paths
+        config1, config2 = generate_spread_configs_direct(
             source1, source2, exchange1, exchange2, spread_pct, 
             strategy='MM',  # Changed from 'SC' to 'MM'
             custom=custom_params  # Added custom parameters
         )
         
-        # Read the generated configs
-        with open(config1_path, 'r') as f:
-            config1 = json.load(f)
-        with open(config2_path, 'r') as f:
-            config2 = json.load(f)
-        
         # Create message with both configs
         message = f"Trading configs generated for {source1} vs {source2} (spread: {spread_pct:.2f}%)\n\n"
         message += f"Config 1:\n```json\n{json.dumps(config1, indent=2)}\n```\n\n"
         message += f"Config 2:\n```json\n{json.dumps(config2, indent=2)}\n```"
+        
         # Use the existing send_message function
         return send_message(message)
         

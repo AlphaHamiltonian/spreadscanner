@@ -274,6 +274,7 @@ def generate_spread_configs_direct(source1: str, source2: str, exchange1: str, e
     config1, config2 = gen.generate_spread_configs(
         source1, source2, exchange1, exchange2, spread_pct, strategy, custom, profile
     )
+    # Return the actual config dictionaries, not file paths
     return config1, config2
 
 # Testing
