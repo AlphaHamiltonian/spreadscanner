@@ -1,7 +1,6 @@
 import requests
-import json
 from source.actionToJSON import create_spread_configs
-
+import orjson as json
 # --------------------------------------------------------------------------- #
 # Configuration – kept identical to your existing variable names
 # --------------------------------------------------------------------------- #
@@ -46,7 +45,7 @@ def send_message(message):
     except Exception as e:
         print(f"Error sending Telegram message: {e}")
         return False
-
+    
 def send_trade(source1, source2, exchange1, exchange2, spread_pct):
     print("connecting")
     """Generate trading configs and send via Telegram bot."""
@@ -59,9 +58,17 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct):
         return False
     
     try:
-        # Generate spread configs
+        # Custom parameters for MM strategy
+        custom_params = {
+            'bid_qty': '200u',  # Change this to your desired quantity
+            'ask_qty': '200u'   # Change this to your desired quantity
+        }
+        
+        # Generate spread configs with MM strategy and custom quantities
         config1_path, config2_path = create_spread_configs(
-            source1, source2, exchange1, exchange2, spread_pct, strategy='SC'
+            source1, source2, exchange1, exchange2, spread_pct, 
+            strategy='MM',  # Changed from 'SC' to 'MM'
+            custom=custom_params  # Added custom parameters
         )
         
         # Read the generated configs
