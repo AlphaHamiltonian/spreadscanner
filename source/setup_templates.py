@@ -18,7 +18,6 @@ def create_templates(overwrite=False):
     templates = {
         "base.json": {
             "request_type": "scan",
-#            "id": "{id}",
             "theo_type": "{theo_type}",
             "trade_strategy": "{trade_strategy}",
             "hedge_strategy": "{hedge_strategy}",
@@ -41,8 +40,8 @@ def create_templates(overwrite=False):
         },
         
         "theo_configs/fast_spread.json": {
-            "comments": "autoGen Spread-{trade_symbol}:{trade_exchange} on {asset_exchange}: {counter}",
-            "configName": "autoS-{trade_symbol}:{trade_exchange} on {asset_exchange}",
+            "comments": "autoGen Spread-{trade_symbol} on {asset_exchange_short}: {counter}",
+            "configName": "autoS-{trade_symbol}:{trade_exchange} on {asset_exchange_short}",
             "checkTickersFrequency": 30000,
             "underlyingAssets": {
                 "assetSymbol": "{asset_symbol}",
@@ -63,8 +62,8 @@ def create_templates(overwrite=False):
         },
         
         "theo_configs/fast_momentum.json": {
-            "comments": "Momentum autoGen-{symbol}:{exchange}-{counter}",
-            "configName": "autoM-{symbol}:{exchange}",
+            "comments": "Momentum autoGen-{symbol}-{exchange_short}-{counter}",
+            "configName": "autoM-{symbol}-{exchange_short}",
             "checkTickersFrequency": 30000,
             "underlyingAssets": {
                 "assetSymbol": "{symbol}",

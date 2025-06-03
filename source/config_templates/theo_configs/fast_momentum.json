@@ -1,6 +1,6 @@
 {
-    "comments": "Momentum autoGen-{symbol}:{exchange}-{counter}",
-    "configName": "autoM-{symbol}:{exchange}",
+    "comments": "Momentum autoGen-{symbol}-{exchange_short}-{counter}",
+    "configName": "autoM-{symbol}-{exchange_short}",
     "checkTickersFrequency": 30000,
     "underlyingAssets": {
         "assetSymbol": "{symbol}",

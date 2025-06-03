@@ -1,20 +1,19 @@
 {
   "request_type": "scan",
-  "id": "63983",
   "theo_type": "FAST",
-  "trade_strategy": "MM",
+  "trade_strategy": "SC",
   "hedge_strategy": "HMomentum",
   "trade_account": "okx_01",
   "hedge_account": "okx_01",
   "trade_times": "0",
-  "offset_bid": "10",
-  "offset_ask": "10",
-  "bid_qty": "50",
-  "ask_qty": "50",
+  "offset_bid": "10b",
+  "offset_ask": "-10b",
+  "bid_qty": "100u",
+  "ask_qty": "100u",
   "auto_hedge": "Yes",
   "theo_config": {
-    "comments": "Momentum config for BTC-USDT-SWAP",
-    "configName": "FAST-MOM-0",
+    "comments": "Momentum autoGen-BTC-USDT-SWAP-SWAP-0",
+    "configName": "autoM-BTC-USDT-SWAP-SWAP",
     "checkTickersFrequency": 30000,
     "underlyingAssets": {
       "assetSymbol": "BTC-USDT-SWAP",
@@ -24,7 +23,7 @@
       "hedgeAsset": "no",
       "hedgeCurrency": "no",
       "minSizeOrderAsset": "6u",
-      "minSizeOrderCurrency": "0"
+      "minSizeOrderCurrency": "6u"
     },
     "tradeAsset": {
       "assetSymbol": "BTC-USDT-SWAP",
@@ -34,27 +33,27 @@
     }
   },
   "trade_config": {
-    "comments": "Config file for MM",
-    "configName": "MM 10b",
+    "comments": "SC auto-0",
+    "configName": "SC-auto",
     "orderType": 0,
-    "updateFrequencyTick": "10b",
-    "postOnlyOption": "Yes",
-    "restartTradeOnPartial": "false",
-    "waitTick": 2000
+    "spikeCheckTime": 0,
+    "autoSizing": "no",
+    "maxQty": 0,
+    "minQty": 0
   },
   "hedge_config": {
-    "comments": "Config file for HMomentum",
-    "configName": "HMomentum BPS",
+    "comments": "HMomentum auto-0",
+    "configName": "HMomentum auto",
     "icebergParts": 1,
     "delayHedgeTime": 0,
     "trailingStop": "150b",
     "trailingStep": "5b",
     "trailingLimit": "20b",
-    "takeProfitTrigger": 100,
+    "takeProfitTrigger": "100b",
     "takeProfitTrailingStop": "5b"
   },
   "metadata": {
-    "generated_at": "2025-06-03 08:57:43",
+    "generated_at": "2025-06-03 10:16:47",
     "strategy": "momentum",
     "spread_pct": "2.5"
   }

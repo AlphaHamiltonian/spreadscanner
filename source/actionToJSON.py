@@ -18,14 +18,14 @@ class ConfigGenerator:
         
         # Account and platform mappings
         self.accounts = {
-            'binance': {'spot': 'bin_spot_10', 'futures': 'bin_10'},
+            'binance': {'spot': 'bin_10', 'futures': 'binfut_10'},
             'bybit': {'spot': 'bybit_spot_01', 'futures': 'bybit_01'},
             'okx': {'spot': 'okx_spot_01', 'futures': 'okx_01'}
         }
         
         self.platforms = {
-            'binance': {'spot': 'BIN_SPOT', 'futures': 'BIN_FUTURES'},
-            'bybit': {'spot': 'BYBIT_SPOT', 'futures': 'BYBIT_LINEAR'},
+            'binance': {'spot': 'BIN_CMAG', 'futures': 'BIN_FUT'},
+            'bybit': {'spot': 'BYBIT_SPOT', 'futures': 'BYBIT_LIN'},
             'okx': {'spot': 'OKX_SPOT', 'futures': 'OKX_SWAP'}
         }
         
@@ -105,10 +105,10 @@ class ConfigGenerator:
         if exchange.lower() == 'binance':
             return symbol.replace('_SPOT', '').replace('-SWAP', '').replace('-', '')
         return symbol
-    
+
     def generate_spread_configs(self, source1: str, source2: str, exchange1: str, exchange2: str,
-                              spread_pct: float = None, strategy: str = 'SC',
-                              custom: Dict = None, profile: str = None) -> Tuple[Dict, Dict]:
+                            spread_pct: float = None, strategy: str = 'SC',
+                            custom: Dict = None, profile: str = None) -> Tuple[Dict, Dict]:
         """Generate spread trading configs"""
         # Parse sources
         _, symbol1 = source1.split(':', 1)
@@ -125,6 +125,13 @@ class ConfigGenerator:
         # Get parameters and base values
         params = self.get_params('spread', strategy, custom, profile)
         base = self.load_template("base.json")
+        
+        # Helper function to get short exchange name
+        def get_short_name(exchange_name):
+            parts = exchange_name.split('_')
+            if len(parts) == 2:
+                return parts[1]  # Return second part (SPOT, FUTURES, LINEAR, SWAP)
+            return exchange_name  # Return as-is if not 2 parts
         
         common = {
             'theo_type': 'FAST',
@@ -152,8 +159,10 @@ class ConfigGenerator:
             'theo_comment': f"Trade {spot_sym} hedge {fut_sym}",
             'asset_symbol': self.format_symbol(fut_sym, fut_ex),
             'asset_exchange': self.platforms[fut_ex]['futures'],
+            'asset_exchange_short': get_short_name(self.platforms[fut_ex]['futures']),
             'trade_symbol': self.format_symbol(spot_sym, spot_ex),
             'trade_exchange': self.platforms[spot_ex]['spot'],
+            'trade_exchange_short': get_short_name(self.platforms[spot_ex]['spot']),
             'strategy_type': 'spread_trade_spot'
         })
         
@@ -166,16 +175,41 @@ class ConfigGenerator:
             'theo_comment': f"Trade {fut_sym} hedge {spot_sym}",
             'asset_symbol': self.format_symbol(spot_sym, spot_ex),
             'asset_exchange': self.platforms[spot_ex]['spot'],
+            'asset_exchange_short': get_short_name(self.platforms[spot_ex]['spot']),
             'trade_symbol': self.format_symbol(fut_sym, fut_ex),
             'trade_exchange': self.platforms[fut_ex]['futures'],
+            'trade_exchange_short': get_short_name(self.platforms[fut_ex]['futures']),
             'strategy_type': 'spread_trade_futures'
         })
         
         self.counter += 1
         return config1, config2
+
+
+    def save_config(self, config: Dict, suffix: str = "") -> Path:
+        """Save config to file"""
+        # Extract the config names from the nested configs
+        theo_config_name = config.get("theo_config", {}).get("configName", "unknown")
+        trade_config_name = config.get("trade_config", {}).get("configName", "unknown")
+        
+        # Clean the names for use in filename
+        theo_clean = theo_config_name.replace(' ', '_').replace('-', '_').replace(':', '_')
+        trade_clean = trade_config_name.replace(' ', '_').replace('-', '_').replace(':', '_')
+        
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        
+        # Combine theo and trade config names for the filename
+        filename = f"{theo_clean}_{trade_clean}_{timestamp}.json"
+        filepath = self.output_dir / filename
+        
+        with open(filepath, 'w') as f:
+            json.dump(config, f, indent=2)
+        
+        logger.info(f"Saved: {filepath.name}")
+        return filepath
     
     def generate_momentum_config(self, source: str, exchange: str, momentum_pct: float = None,
-                               strategy: str = 'SC', custom: Dict = None, profile: str = None) -> Dict:
+                            strategy: str = 'SC', custom: Dict = None, profile: str = None) -> Dict:
         """Generate momentum trading config"""
         _, symbol = source.split(':', 1)
         is_spot = '_SPOT' in symbol
@@ -184,6 +218,13 @@ class ConfigGenerator:
         base = self.load_template("base.json")
         account = self.accounts[exchange]['spot' if is_spot else 'futures']
         platform = self.platforms[exchange]['spot' if is_spot else 'futures']
+        
+        # Helper function to get short exchange name
+        def get_short_name(exchange_name):
+            parts = exchange_name.split('_')
+            if len(parts) == 2:
+                return parts[1]  # Return second part (SPOT, FUTURES, LINEAR, SWAP)
+            return exchange_name  # Return as-is if not 2 parts
         
         config = self.fill_template(base, {
             'id': int(time.time() * 1000) % 100000,
@@ -197,6 +238,7 @@ class ConfigGenerator:
             'hedge_config_file': 'hmomentum.json',
             'symbol': self.format_symbol(symbol, exchange),
             'exchange': platform,
+            'exchange_short': get_short_name(platform),
             'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
             'strategy_type': 'momentum',
             'spread_pct': momentum_pct or 0,
@@ -206,23 +248,6 @@ class ConfigGenerator:
         
         self.counter += 1
         return config
-    
-    def save_config(self, config: Dict, suffix: str = "") -> Path:
-        """Save config to file"""
-        symbol = config.get("theo_config", {}).get("underlyingAssets", {}).get("assetSymbol", "unknown")
-        clean_symbol = symbol.replace('-', '_').replace('/', '_')
-        strategy = config.get("trade_strategy", "SC")
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        
-        filename = f"trade_config_{clean_symbol}_{strategy}{suffix}_{timestamp}.json"
-        filepath = self.output_dir / filename
-        
-        with open(filepath, 'w') as f:
-            json.dump(config, f, indent=2)
-        
-        logger.info(f"Saved: {filepath.name}")
-        return filepath
-
 # API Functions
 def create_spread_configs(source1: str, source2: str, exchange1: str, exchange2: str,
                          spread_pct: float = None, strategy: str = 'SC',
