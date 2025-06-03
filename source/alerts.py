@@ -61,7 +61,7 @@ class AlertManager:
         except (ValueError, TypeError):
             return
         
-        if abs(r) >= Config.FUNDING_RATE_THRESHOLD:
+        if abs(r) >= Config.FUNDING_RATE_THRESHOLD and exchange == "binance":
             key = (exchange, symbol)
             now = time.time()
             
