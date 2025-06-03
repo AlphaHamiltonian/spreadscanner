@@ -283,7 +283,7 @@ if __name__ == "__main__":
     # 3. Using profile (if strategy_config.json exists)
 
     p5 = create_momentum_config(
-        "okx:BTC-USDT-SWAP", "okx", 2.5, strategy='SC', profile='takeout'
+        "binance:ETHUSDT", "binance", 2.5, strategy='SC', profile='takeout'
     )
     print(f"✓ Profile: {p5.name}")
 

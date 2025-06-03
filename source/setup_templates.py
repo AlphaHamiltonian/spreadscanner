@@ -70,7 +70,7 @@ def create_templates(overwrite=False):
                 "assetExchange": "{exchange}",
                 "currencySymbol": "",
                 "currencyExchange": "",
-                "hedgeAsset": "no",
+                "hedgeAsset": "yes",
                 "hedgeCurrency": "no",
                 "minSizeOrderAsset": "6u",
                 "minSizeOrderCurrency": "6u"
@@ -107,7 +107,7 @@ def create_templates(overwrite=False):
         "trade_strategies/sc.json": {
             "comments": "SC auto-{counter}",
             "configName": "SC-auto",
-            "orderType": 0,
+            "orderType": 2,
             "spikeCheckTime": 0,
             "autoSizing": "no",
             "maxQty": 0,
