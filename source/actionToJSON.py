@@ -276,7 +276,7 @@ if __name__ == "__main__":
     # 1. MM with custom parameters
     p1, p2 = create_spread_configs(
         "binance:ETHUSDT", "binance:ETHUSDT_SPOT", "binance", "binance", 1.2,
-        strategy='MM', custom={'offset_bid': '15', 'bid_qty': '100'}
+        strategy='MM'
     )
     print(f"✓ MM Custom: {p1.name}, {p2.name}")
     

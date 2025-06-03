@@ -6,14 +6,14 @@
   "trade_account": "binfut_10",
   "hedge_account": "bin_10",
   "trade_times": "0",
-  "offset_bid": "15",
+  "offset_bid": "-100b",
   "offset_ask": "100b",
-  "bid_qty": "100",
+  "bid_qty": "100u",
   "ask_qty": "100u",
   "auto_hedge": "Yes",
   "theo_config": {
-    "comments": "autoGen Spread-ETHUSDT on CMAG: 0",
-    "configName": "autoS-ETHUSDT on CMAG",
+    "comments": "autoGen Spread-ETHUSDT:FUT on CMAG: 0",
+    "configName": "autoS-ETHUSDT:FUT on CMAG",
     "checkTickersFrequency": 30000,
     "underlyingAssets": {
       "assetSymbol": "ETHUSDT",
@@ -50,7 +50,7 @@
     "delayHedgeTime": 2000
   },
   "metadata": {
-    "generated_at": "2025-06-03 10:16:47",
+    "generated_at": "2025-06-03 10:28:38",
     "strategy": "spread_trade_futures",
     "spread_pct": "1.2"
   }
