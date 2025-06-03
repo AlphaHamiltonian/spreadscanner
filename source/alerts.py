@@ -11,49 +11,54 @@ class AlertManager:
         self.threshold_timestamps = {}
         self.last_notification_time = {}
         self.last_funding_notif_time = {}
-    
+        self.last_trade_time = {}
+
     def check_spread_alert(self, spread_pct, source1, source2, exchange1, exchange2):
-        """Check spread thresholds and send alerts"""
-        if not (spread_pct > Config.UPPER_LIMIT or spread_pct < Config.LOWER_LIMIT):
-            return
+            """Check spread thresholds and send alerts"""
+            if not (spread_pct > Config.UPPER_LIMIT or spread_pct < Config.LOWER_LIMIT):
+                return
+                
+            asset_pair_key = f"{source1}_vs_{source2}"
+            current_time = time.time()
             
-        asset_pair_key = f"{source1}_vs_{source2}"
-        current_time = time.time()
-        
-        # Initialize timestamp list if needed
-        if asset_pair_key not in self.threshold_timestamps:
-            self.threshold_timestamps[asset_pair_key] = []
-        
-        # Add current timestamp
-        self.threshold_timestamps[asset_pair_key].append(current_time)
-        
-        # Remove old timestamps
-        self.threshold_timestamps[asset_pair_key] = [
-            ts for ts in self.threshold_timestamps[asset_pair_key] 
-            if current_time - ts <= Config.DELETE_OLD_TIME
-        ]
-        
-        # Count unique seconds
-        unique_seconds = set(int(ts) for ts in self.threshold_timestamps[asset_pair_key])
-        
-        # Check notification cooldown
-        last_notif_time = self.last_notification_time.get(asset_pair_key, 0)
-        
-        if len(unique_seconds) >= Config.NUMBER_OF_SEC_THRESHOLD_TRADE and current_time - last_notif_time > 1800:
-            if spread_pct > Config.UPPER_LIMIT:
-                notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% above upper limit ({Config.UPPER_LIMIT}%)"
-            else:
-                notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% below lower limit ({Config.LOWER_LIMIT}%)"
+            # Initialize timestamp list if needed
+            if asset_pair_key not in self.threshold_timestamps:
+                self.threshold_timestamps[asset_pair_key] = []
             
-            if exchange1 == exchange2 and exchange1 == "binance":
-                if send_trade(source1, source2, exchange1, exchange2, spread_pct):
-                    self.last_notification_time[asset_pair_key] = current_time
-                    logger.info(f"mock trade sent for {asset_pair_key}. Next notification in 30 minutes.")
+            # Add current timestamp
+            self.threshold_timestamps[asset_pair_key].append(current_time)
+            
+            # Remove old timestamps
+            self.threshold_timestamps[asset_pair_key] = [
+                ts for ts in self.threshold_timestamps[asset_pair_key] 
+                if current_time - ts <= Config.DELETE_OLD_TIME
+            ]
+            
+            # Count unique seconds
+            unique_seconds = set(int(ts) for ts in self.threshold_timestamps[asset_pair_key])
+            
+            # Check notification cooldown
+            last_notif_time = self.last_notification_time.get(asset_pair_key, 0)
+            last_trade_time = self.last_trade_time.get(asset_pair_key, 0)  
+            
+            if len(unique_seconds) >= Config.NUMBER_OF_SEC_THRESHOLD_TRADE and current_time - last_notif_time > 1800:
+                if spread_pct > Config.UPPER_LIMIT:
+                    notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% above upper limit ({Config.UPPER_LIMIT}%)"
+                else:
+                    notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% below lower limit ({Config.LOWER_LIMIT}%)"
+                
+                if exchange1 == exchange2 and exchange1 == "binance":
+                    # Check 24-hour cooldown for trades (86400 seconds = 24 hours)
+                    if current_time - last_trade_time > 86400:
+                        if send_trade(source1, source2, exchange1, exchange2, spread_pct):
+                            self.last_trade_time[asset_pair_key] = current_time  # Update trade time
+                            logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")
+                    
+                    # Regular notification logic remains unchanged
                     if len(unique_seconds) >= Config.NUMBER_OF_SEC_THRESHOLD:
                         if send_message(notification_message):
                             self.last_notification_time[asset_pair_key] = current_time
                             logger.info(f"Notification sent for {asset_pair_key}. Next notification in 30 minutes.")
-    
     def check_funding_alert(self, exchange, symbol, rate):
         """Check funding rate alerts"""
         try:
