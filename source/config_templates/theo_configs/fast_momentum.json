@@ -7,7 +7,7 @@
         "assetExchange": "{exchange}",
         "currencySymbol": "",
         "currencyExchange": "",
-        "hedgeAsset": "no",
+        "hedgeAsset": "yes",
         "hedgeCurrency": "no",
         "minSizeOrderAsset": "6u",
         "minSizeOrderCurrency": "6u"
