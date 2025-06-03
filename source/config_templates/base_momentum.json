@@ -1,0 +1,23 @@
+{
+    "request_type": "scan",
+    "id": "{id}",
+    "theo_type": "FAST",
+    "trade_strategy": "SC",
+    "hedge_strategy": "HMomentum",
+    "trade_account": "{trade_account}",
+    "hedge_account": "{hedge_account}",
+    "trade_times": "0",
+    "offset_bid": "10b",
+    "offset_ask": "-10b",
+    "bid_qty": "0",
+    "ask_qty": "0",
+    "auto_hedge": "Yes",
+    "theo_config": "@theo_configs/{theo_config_file}",
+    "trade_config": "@trade_strategies/{trade_config_file}",
+    "hedge_config": "@hedge_strategies/{hedge_config_file}",
+    "metadata": {
+        "generated_at": "{timestamp}",
+        "strategy": "{strategy_type}",
+        "momentum_pct": "{momentum_pct}"
+    }
+}

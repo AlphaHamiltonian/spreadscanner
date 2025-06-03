@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Complete setup script to create all template files
+Complete setup script to create all template files with proper default values
 Run this to set up the entire template structure
 """
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 
 def create_templates(overwrite=False):
-    """Create all template files with proper structure
+    """Create all template files with proper structure and default values
     
     Args:
         overwrite: If True, overwrites existing files. If False, skips existing files.
@@ -24,22 +24,22 @@ def create_templates(overwrite=False):
     (base_dir / "trade_strategies").mkdir(exist_ok=True)
     (base_dir / "theo_configs").mkdir(exist_ok=True)
     
-    # Template definitions
+    # Template definitions with proper default values
     templates = {
-        # Main base template that references other templates
-        "base.json": {
+        # Main base template for SPREAD strategies
+        "base_spread.json": {
             "request_type": "scan",
             "id": "{id}",
-            "theo_type": "{theo_type}",
-            "trade_strategy": "{trade_strategy}",
-            "hedge_strategy": "{hedge_strategy}",
+            "theo_type": "FAST",
+            "trade_strategy": "MM-TO",
+            "hedge_strategy": "HLimit",
             "trade_account": "{trade_account}",
             "hedge_account": "{hedge_account}",
             "trade_times": "0",
-            "offset_bid": "0",
-            "offset_ask": "0",
-            "bid_qty": "0",
-            "ask_qty": "0",
+            "offset_bid": "-100b",  # Default for spread
+            "offset_ask": "100b",   # Default for spread
+            "bid_qty": "100u",
+            "ask_qty": "100u",
             "auto_hedge": "Yes",
             "theo_config": "@theo_configs/{theo_config_file}",
             "trade_config": "@trade_strategies/{trade_config_file}",
@@ -51,6 +51,31 @@ def create_templates(overwrite=False):
             }
         },
         
+        # Main base template for MOMENTUM strategies
+        "base_momentum.json": {
+            "request_type": "scan",
+            "id": "{id}",
+            "theo_type": "FAST",
+            "trade_strategy": "SC",
+            "hedge_strategy": "HMomentum",
+            "trade_account": "{trade_account}",
+            "hedge_account": "{hedge_account}",
+            "trade_times": "0",
+            "offset_bid": "10b",   # Default for momentum
+            "offset_ask": "-10b",  # Default for momentum
+            "bid_qty": "100u",
+            "ask_qty": "100u",
+            "auto_hedge": "Yes",
+            "theo_config": "@theo_configs/{theo_config_file}",
+            "trade_config": "@trade_strategies/{trade_config_file}",
+            "hedge_config": "@hedge_strategies/{hedge_config_file}",
+            "metadata": {
+                "generated_at": "{timestamp}",
+                "strategy": "{strategy_type}",
+                "momentum_pct": "{momentum_pct}"
+            }
+        },
+        
         # Theo configurations
         "theo_configs/fast_spread.json": {
             "comments": "{theo_comment}",
@@ -59,12 +84,12 @@ def create_templates(overwrite=False):
             "underlyingAssets": {
                 "assetSymbol": "{asset_symbol}",
                 "assetExchange": "{asset_exchange}",
-                "currencySymbol": "{currency_symbol}",
-                "currencyExchange": "{currency_exchange}",
+                "currencySymbol": "",
+                "currencyExchange": "",
                 "hedgeAsset": "yes",
-                "hedgeCurrency": "{hedge_currency}",
+                "hedgeCurrency": "no",
                 "minSizeOrderAsset": "6u",
-                "minSizeOrderCurrency": "{min_size_currency}"
+                "minSizeOrderCurrency": "0"
             },
             "tradeAsset": {
                 "assetSymbol": "{trade_symbol}",
@@ -114,7 +139,7 @@ def create_templates(overwrite=False):
             "trailingStop": "150b",
             "trailingStep": "5b",
             "trailingLimit": "20b",
-            "takeProfitTrigger": 100,
+            "takeProfitTrigger": "100b",
             "takeProfitTrailingStop": "5b"
         },
         
@@ -122,7 +147,7 @@ def create_templates(overwrite=False):
         "trade_strategies/sc.json": {
             "comments": "Config file for SC",
             "configName": "SC-{counter}",
-            "orderType": 0,
+            "orderType": 2,
             "spikeCheckTime": 0,
             "autoSizing": "no",
             "maxQty": 0,
@@ -207,7 +232,7 @@ if __name__ == "__main__":
     template_dir = create_templates(overwrite=overwrite)
     
     print("\n📝 Next steps:")
-    print("1. Copy the new actionToJSON.py to your source directory")
+    print("1. Run this script to create/update templates")
     print("2. Run: python source/actionToJSON.py")
     print("3. Check the trading_configs directory for generated files")
     
@@ -215,7 +240,7 @@ if __name__ == "__main__":
     print("\n🧪 Quick test...")
     try:
         from pathlib import Path
-        test_file = template_dir / "base.json"
+        test_file = template_dir / "base_spread.json"
         if test_file.exists():
             print("✅ Template files are accessible")
         else:

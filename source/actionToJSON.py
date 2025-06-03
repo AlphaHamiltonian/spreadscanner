@@ -37,13 +37,14 @@ class ConfigGenerator:
         }
     
     def load_template(self, template_path: str) -> Dict[str, Any]:
-        """Load JSON template (references are resolved during fill_template)"""
+        """Load JSON template from file"""
         if template_path not in self._templates_cache:
             full_path = self.template_dir / template_path
             with open(full_path, 'r') as f:
                 template = json.load(f)
             self._templates_cache[template_path] = template
-        return json.loads(json.dumps(self._templates_cache[template_path]))  # Deep copy
+        # Return a deep copy to avoid mutation
+        return json.loads(json.dumps(self._templates_cache[template_path]))
     
     def fill_template(self, template: Any, values: Dict[str, Any]) -> Any:
         """Recursively fill template placeholders and resolve @references"""
@@ -52,7 +53,7 @@ class ConfigGenerator:
         elif isinstance(template, list):
             return [self.fill_template(item, values) for item in template]
         elif isinstance(template, str):
-            # First, replace any placeholders
+            # Replace placeholders
             if '{' in template and '}' in template:
                 result = template
                 for key, value in values.items():
@@ -61,11 +62,10 @@ class ConfigGenerator:
                         result = result.replace(placeholder, str(value))
                 template = result
             
-            # Then, if it's a reference, load that template
+            # Handle template references
             if template.startswith('@'):
                 ref_path = template[1:]  # Remove @ prefix
                 referenced_template = self.load_template(ref_path)
-                # Recursively fill the referenced template
                 return self.fill_template(referenced_template, values)
                 
         return template
@@ -101,21 +101,14 @@ class ConfigGenerator:
         spot_formatted = self.format_symbol(spot_sym, spot_ex)
         fut_formatted = self.format_symbol(fut_sym, fut_ex)
         
-        # Load base template
-        base_template = self.load_template("base.json")
+        # Load the spread base template (with default offsets)
+        base_template = self.load_template("base_spread.json")
         
-        # Common values
+        # Common values for both configs
         common_values = {
-            'theo_type': 'FAST',
-            'trade_strategy': 'SC',
-            'hedge_strategy': 'HLimit',
             'theo_config_file': 'fast_spread.json',
             'trade_config_file': 'sc.json',
             'hedge_config_file': 'hlimit.json',
-            'currency_symbol': '',
-            'currency_exchange': '',
-            'hedge_currency': 'no',
-            'min_size_currency': '0',
             'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
             'spread_pct': spread_pct or 0,
             'counter': self.counter
@@ -161,28 +154,26 @@ class ConfigGenerator:
         is_spot = '_SPOT' in symbol
         symbol_formatted = self.format_symbol(symbol, exchange)
         
-        # Load base template
-        base_template = self.load_template("base.json")
+        # Load the momentum base template (with default offsets)
+        base_template = self.load_template("base_momentum.json")
         
-        # Fill values
+        # Determine account and platform
         account = self.accounts[exchange]['spot' if is_spot else 'futures']
         platform = self.platforms[exchange]['spot' if is_spot else 'futures']
         
+        # Fill template
         config = self.fill_template(base_template, {
             'id': int(time.time() * 1000) % 100000,
-            'theo_type': 'FAST',
-            'trade_strategy': 'SC',
-            'hedge_strategy': 'HMomentum',
+            'theo_config_file': 'fast_momentum.json',
+            'trade_config_file': 'sc.json',
+            'hedge_config_file': 'hmomentum.json',
             'trade_account': account,
             'hedge_account': account,
-            'theo_config_file': 'fast_momentum.json',
-            'trade_config_file': 'sc.json', 
-            'hedge_config_file': 'hmomentum.json',
             'symbol': symbol_formatted,
             'exchange': platform,
             'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
             'strategy_type': 'momentum',
-            'spread_pct': momentum_pct or 0,
+            'momentum_pct': momentum_pct or 0,
             'counter': self.counter
         })
         
@@ -193,10 +184,15 @@ class ConfigGenerator:
         """Save config to file"""
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         
-        # Extract symbol from config
-        symbol = config.get("theo_config", {}).get("underlyingAssets", {}).get("assetSymbol", "unknown")
-        clean_symbol = symbol.replace('-', '_').replace('/', '_')
+        # Extract symbol from config for filename
+        symbol = "unknown"
+        if "theo_config" in config:
+            if "underlyingAssets" in config["theo_config"]:
+                symbol = config["theo_config"]["underlyingAssets"].get("assetSymbol", "unknown")
+            elif "tradeAsset" in config["theo_config"]:
+                symbol = config["theo_config"]["tradeAsset"].get("assetSymbol", "unknown")
         
+        clean_symbol = symbol.replace('-', '_').replace('/', '_')
         filename = f"trade_config_{clean_symbol}{suffix}_{timestamp}.json"
         filepath = self.output_dir / filename
         
@@ -248,7 +244,8 @@ def check_templates(template_dir: str = None) -> bool:
         base_dir = Path(__file__).parent / "config_templates"
     
     required_files = [
-        "base.json",
+        "base_spread.json",
+        "base_momentum.json",
         "theo_configs/fast_spread.json",
         "theo_configs/fast_momentum.json",
         "hedge_strategies/hlimit.json",
@@ -299,6 +296,11 @@ if __name__ == "__main__":
         )
         print(f"   ✓ {p1.name}")
         print(f"   ✓ {p2.name}")
+        
+        # Verify offsets are correct for spread
+        with open(p1, 'r') as f:
+            config = json.load(f)
+            print(f"   Spread offsets: bid={config['offset_bid']}, ask={config['offset_ask']}")
     except Exception as e:
         print(f"   ✗ Error: {e}")
     
@@ -307,6 +309,11 @@ if __name__ == "__main__":
     try:
         p3 = create_momentum_config("binance:ETHUSDT", "binance", 2.5)
         print(f"   ✓ {p3.name}")
+        
+        # Verify offsets are correct for momentum
+        with open(p3, 'r') as f:
+            config = json.load(f)
+            print(f"   Momentum offsets: bid={config['offset_bid']}, ask={config['offset_ask']}")
     except Exception as e:
         print(f"   ✗ Error: {e}")
     
