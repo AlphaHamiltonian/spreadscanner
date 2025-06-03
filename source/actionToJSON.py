@@ -266,6 +266,16 @@ def create_momentum_config(source: str, exchange: str, momentum_pct: float = Non
     config = gen.generate_momentum_config(source, exchange, momentum_pct, strategy, custom, profile)
     return gen.save_config(config, "_MOM")
 
+def generate_spread_configs_direct(source1: str, source2: str, exchange1: str, exchange2: str,
+                                 spread_pct: float = None, strategy: str = 'SC',
+                                 custom: Dict = None, profile: str = None) -> Tuple[Dict, Dict]:
+    """Generate spread configs and return them directly without saving to disk"""
+    gen = ConfigGenerator()
+    config1, config2 = gen.generate_spread_configs(
+        source1, source2, exchange1, exchange2, spread_pct, strategy, custom, profile
+    )
+    return config1, config2
+
 # Testing
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s')

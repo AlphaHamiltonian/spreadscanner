@@ -1,5 +1,5 @@
 import requests
-from source.actionToJSON import create_spread_configs
+from source.actionToJSON import generate_spread_configs_direct
 import orjson as json
 # --------------------------------------------------------------------------- #
 # Configuration – kept identical to your existing variable names
@@ -65,7 +65,7 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct):
         }
         
         # Generate spread configs with MM strategy and custom quantities
-        config1_path, config2_path = create_spread_configs(
+        config1_path, config2_path = generate_spread_configs_direct(
             source1, source2, exchange1, exchange2, spread_pct, 
             strategy='MM',  # Changed from 'SC' to 'MM'
             custom=custom_params  # Added custom parameters
@@ -81,24 +81,9 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct):
         message = f"Trading configs generated for {source1} vs {source2} (spread: {spread_pct:.2f}%)\n\n"
         message += f"Config 1:\n```json\n{json.dumps(config1, indent=2)}\n```\n\n"
         message += f"Config 2:\n```json\n{json.dumps(config2, indent=2)}\n```"
+        # Use the existing send_message function
+        return send_message(message)
         
-        # Send message
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        data = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": message,
-            "parse_mode": "Markdown"  # Use Markdown for code blocks
-        }
-        response = requests.post(url, data=data, timeout=10)
-        
-        if response.status_code == 200:
-            print(f"Trade configs sent successfully.")
-            return True
-        else:
-            print(f"Failed to send trade configs. Status code: {response.status_code}")
-            print(f"Response: {response.text}")
-            return False
-            
     except Exception as e:
-        print(f"Error sending trade configs: {e}")
+        print(f"Error generating trade configs: {e}")
         return False
