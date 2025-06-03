@@ -1,0 +1,55 @@
+{
+    "strategy_parameters": {
+        "spread": {
+            "SC": {
+                "offset_bid": "0",
+                "offset_ask": "0",
+                "bid_qty": "0",
+                "ask_qty": "0"
+            },
+            "MM": {
+                "offset_bid": "2",
+                "offset_ask": "2",
+                "bid_qty": "10",
+                "ask_qty": "10"
+            }
+        },
+        "momentum": {
+            "SC": {
+                "offset_bid": "0",
+                "offset_ask": "0",
+                "bid_qty": "0",
+                "ask_qty": "0"
+            },
+            "MM": {
+                "offset_bid": "5",
+                "offset_ask": "5",
+                "bid_qty": "20",
+                "ask_qty": "20"
+            }
+        }
+    },
+    "custom_profiles": {
+        "aggressive_mm": {
+            "offset_bid": "10",
+            "offset_ask": "10",
+            "bid_qty": "50",
+            "ask_qty": "50",
+            "description": "Aggressive market making"
+        },
+        "conservative_mm": {
+            "offset_bid": "1",
+            "offset_ask": "1",
+            "bid_qty": "5",
+            "ask_qty": "5",
+            "description": "Conservative market making"
+        },
+        "scalper": {
+            "offset_bid": "0.5",
+            "offset_ask": "0.5",
+            "bid_qty": "100",
+            "ask_qty": "100",
+            "description": "High frequency scalping"
+        }
+    }
+}

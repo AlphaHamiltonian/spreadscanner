@@ -1,11 +1,11 @@
 {
   "request_type": "scan",
-  "id": "11662",
+  "id": "63982",
   "theo_type": "FAST",
   "trade_strategy": "SC",
   "hedge_strategy": "HLimit",
-  "trade_account": "okx_spot_01",
-  "hedge_account": "okx_01",
+  "trade_account": "bin_10",
+  "hedge_account": "bin_spot_10",
   "trade_times": "0",
   "offset_bid": "0",
   "offset_ask": "0",
@@ -13,12 +13,12 @@
   "ask_qty": "0",
   "auto_hedge": "Yes",
   "theo_config": {
-    "comments": "Trade BTC-USDT_SPOT hedge BTC-USDT-SWAP",
-    "configName": "FAST-SPOT-0",
+    "comments": "Trade BTCUSDT hedge BTCUSDT_SPOT",
+    "configName": "FAST-FUT-0",
     "checkTickersFrequency": 30000,
     "underlyingAssets": {
-      "assetSymbol": "BTC-USDT-SWAP",
-      "assetExchange": "OKX_SWAP",
+      "assetSymbol": "BTCUSDT",
+      "assetExchange": "BIN_SPOT",
       "currencySymbol": "",
       "currencyExchange": "",
       "hedgeAsset": "yes",
@@ -27,8 +27,8 @@
       "minSizeOrderCurrency": "0"
     },
     "tradeAsset": {
-      "assetSymbol": "BTC-USDT_SPOT",
-      "assetExchange": "OKX_SPOT",
+      "assetSymbol": "BTCUSDT",
+      "assetExchange": "BIN_FUTURES",
       "minSizeOrder": "6u",
       "currencyType": "Divide"
     }
@@ -51,8 +51,8 @@
     "delayHedgeTime": 2000
   },
   "metadata": {
-    "generated_at": "2025-06-03 06:08:31",
-    "strategy": "spread_trade_spot",
-    "spread_pct": "1.2"
+    "generated_at": "2025-06-03 08:57:43",
+    "strategy": "spread_trade_futures",
+    "spread_pct": "0.85"
   }
 }

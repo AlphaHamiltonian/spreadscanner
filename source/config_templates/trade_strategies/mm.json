@@ -1,0 +1,9 @@
+{
+    "comments": "Config file for MM",
+    "configName": "MM 10b",
+    "orderType": 0,
+    "updateFrequencyTick": "10b",
+    "postOnlyOption": "Yes",
+    "restartTradeOnPartial": "false",
+    "waitTick": 2000
+}

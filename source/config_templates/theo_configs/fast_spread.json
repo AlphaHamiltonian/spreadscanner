@@ -5,12 +5,12 @@
     "underlyingAssets": {
         "assetSymbol": "{asset_symbol}",
         "assetExchange": "{asset_exchange}",
-        "currencySymbol": "",
-        "currencyExchange": "",
+        "currencySymbol": "{currency_symbol}",
+        "currencyExchange": "{currency_exchange}",
         "hedgeAsset": "yes",
-        "hedgeCurrency": "no",
+        "hedgeCurrency": "{hedge_currency}",
         "minSizeOrderAsset": "6u",
-        "minSizeOrderCurrency": "0"
+        "minSizeOrderCurrency": "{min_size_currency}"
     },
     "tradeAsset": {
         "assetSymbol": "{trade_symbol}",

@@ -1,24 +1,24 @@
 {
   "request_type": "scan",
-  "id": "11662",
+  "id": "63983",
   "theo_type": "FAST",
-  "trade_strategy": "SC",
+  "trade_strategy": "MM",
   "hedge_strategy": "HMomentum",
-  "trade_account": "bin_10",
-  "hedge_account": "bin_10",
+  "trade_account": "okx_01",
+  "hedge_account": "okx_01",
   "trade_times": "0",
-  "offset_bid": "0",
-  "offset_ask": "0",
-  "bid_qty": "0",
-  "ask_qty": "0",
+  "offset_bid": "10",
+  "offset_ask": "10",
+  "bid_qty": "50",
+  "ask_qty": "50",
   "auto_hedge": "Yes",
   "theo_config": {
-    "comments": "Momentum config for ETHUSDT",
+    "comments": "Momentum config for BTC-USDT-SWAP",
     "configName": "FAST-MOM-0",
     "checkTickersFrequency": 30000,
     "underlyingAssets": {
-      "assetSymbol": "ETHUSDT",
-      "assetExchange": "BIN_FUTURES",
+      "assetSymbol": "BTC-USDT-SWAP",
+      "assetExchange": "OKX_SWAP",
       "currencySymbol": "",
       "currencyExchange": "",
       "hedgeAsset": "no",
@@ -27,20 +27,20 @@
       "minSizeOrderCurrency": "0"
     },
     "tradeAsset": {
-      "assetSymbol": "ETHUSDT",
-      "assetExchange": "BIN_FUTURES",
+      "assetSymbol": "BTC-USDT-SWAP",
+      "assetExchange": "OKX_SWAP",
       "minSizeOrder": "6u",
       "currencyType": "Divide"
     }
   },
   "trade_config": {
-    "comments": "Config file for SC",
-    "configName": "SC-0",
+    "comments": "Config file for MM",
+    "configName": "MM 10b",
     "orderType": 0,
-    "spikeCheckTime": 0,
-    "autoSizing": "no",
-    "maxQty": 0,
-    "minQty": 0
+    "updateFrequencyTick": "10b",
+    "postOnlyOption": "Yes",
+    "restartTradeOnPartial": "false",
+    "waitTick": 2000
   },
   "hedge_config": {
     "comments": "Config file for HMomentum",
@@ -54,7 +54,7 @@
     "takeProfitTrailingStop": "5b"
   },
   "metadata": {
-    "generated_at": "2025-06-03 06:08:31",
+    "generated_at": "2025-06-03 08:57:43",
     "strategy": "momentum",
     "spread_pct": "2.5"
   }

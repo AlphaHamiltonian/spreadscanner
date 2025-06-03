@@ -1,24 +1,24 @@
 {
   "request_type": "scan",
-  "id": "11663",
+  "id": "63983",
   "theo_type": "FAST",
-  "trade_strategy": "SC",
+  "trade_strategy": "MM",
   "hedge_strategy": "HLimit",
-  "trade_account": "okx_01",
-  "hedge_account": "okx_spot_01",
+  "trade_account": "bin_10",
+  "hedge_account": "bin_spot_10",
   "trade_times": "0",
-  "offset_bid": "0",
-  "offset_ask": "0",
-  "bid_qty": "0",
-  "ask_qty": "0",
+  "offset_bid": "15",
+  "offset_ask": "2",
+  "bid_qty": "100",
+  "ask_qty": "10",
   "auto_hedge": "Yes",
   "theo_config": {
-    "comments": "Trade BTC-USDT-SWAP hedge BTC-USDT_SPOT",
+    "comments": "Trade ETHUSDT hedge ETHUSDT_SPOT",
     "configName": "FAST-FUT-0",
     "checkTickersFrequency": 30000,
     "underlyingAssets": {
-      "assetSymbol": "BTC-USDT_SPOT",
-      "assetExchange": "OKX_SPOT",
+      "assetSymbol": "ETHUSDT",
+      "assetExchange": "BIN_SPOT",
       "currencySymbol": "",
       "currencyExchange": "",
       "hedgeAsset": "yes",
@@ -27,20 +27,20 @@
       "minSizeOrderCurrency": "0"
     },
     "tradeAsset": {
-      "assetSymbol": "BTC-USDT-SWAP",
-      "assetExchange": "OKX_SWAP",
+      "assetSymbol": "ETHUSDT",
+      "assetExchange": "BIN_FUTURES",
       "minSizeOrder": "6u",
       "currencyType": "Divide"
     }
   },
   "trade_config": {
-    "comments": "Config file for SC",
-    "configName": "SC-0",
+    "comments": "Config file for MM",
+    "configName": "MM 10b",
     "orderType": 0,
-    "spikeCheckTime": 0,
-    "autoSizing": "no",
-    "maxQty": 0,
-    "minQty": 0
+    "updateFrequencyTick": "10b",
+    "postOnlyOption": "Yes",
+    "restartTradeOnPartial": "false",
+    "waitTick": 2000
   },
   "hedge_config": {
     "comments": "HLimit 1",
@@ -51,7 +51,7 @@
     "delayHedgeTime": 2000
   },
   "metadata": {
-    "generated_at": "2025-06-03 06:08:31",
+    "generated_at": "2025-06-03 08:57:43",
     "strategy": "spread_trade_futures",
     "spread_pct": "1.2"
   }

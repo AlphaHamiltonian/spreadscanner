@@ -7,19 +7,12 @@ import time
 logger = logging.getLogger(__name__)
 
 class ConfigGenerator:
-    """Clean config generator using modular JSON templates"""
+    """Config generator using modular JSON templates with strategy parameters"""
     
     def __init__(self, output_dir: str = "./trading_configs", template_dir: str = None):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
-        
-        # Set template directory
-        if template_dir:
-            self.template_dir = Path(template_dir)
-        else:
-            # Default to source/config_templates
-            self.template_dir = Path(__file__).parent / "config_templates"
-        
+        self.template_dir = Path(template_dir) if template_dir else Path(__file__).parent / "config_templates"
         self.counter = 0
         self._templates_cache = {}
         
@@ -35,19 +28,64 @@ class ConfigGenerator:
             'bybit': {'spot': 'BYBIT_SPOT', 'futures': 'BYBIT_LINEAR'},
             'okx': {'spot': 'OKX_SPOT', 'futures': 'OKX_SWAP'}
         }
+        
+        # Load strategy config
+        self._load_strategy_config()
     
-    def load_template(self, template_path: str) -> Dict[str, Any]:
-        """Load JSON template from file"""
-        if template_path not in self._templates_cache:
-            full_path = self.template_dir / template_path
-            with open(full_path, 'r') as f:
-                template = json.load(f)
-            self._templates_cache[template_path] = template
-        # Return a deep copy to avoid mutation
-        return json.loads(json.dumps(self._templates_cache[template_path]))
+    def _load_strategy_config(self):
+        """Load strategy parameters from config file or use defaults"""
+        config_file = Path(__file__).parent / "strategy_config.json"
+        
+        if config_file.exists():
+            try:
+                with open(config_file, 'r') as f:
+                    data = json.load(f)
+                self.strategy_params = data.get('strategy_parameters', {})
+                self.profiles = data.get('custom_profiles', {})
+                logger.info(f"Loaded strategy config with {len(self.profiles)} profiles")
+                return
+            except Exception as e:
+                logger.warning(f"Error loading strategy config: {e}")
+        
+        # Default parameters if no config file
+        self.strategy_params = {
+            'spread': {
+                'SC': {'offset_bid': '0', 'offset_ask': '0', 'bid_qty': '0', 'ask_qty': '0'},
+                'MM': {'offset_bid': '2', 'offset_ask': '2', 'bid_qty': '10', 'ask_qty': '10'}
+            },
+            'momentum': {
+                'SC': {'offset_bid': '0', 'offset_ask': '0', 'bid_qty': '0', 'ask_qty': '0'},
+                'MM': {'offset_bid': '5', 'offset_ask': '5', 'bid_qty': '20', 'ask_qty': '20'}
+            }
+        }
+        self.profiles = {}
+    
+    def get_params(self, strategy_type: str, trade_strategy: str, 
+                   custom: Dict = None, profile: str = None) -> Dict[str, str]:
+        """Get merged parameters: defaults -> profile -> custom"""
+        # Start with strategy defaults
+        params = self.strategy_params.get(strategy_type, {}).get(trade_strategy.upper(), {}).copy()
+        
+        # Apply profile if specified
+        if profile and profile in self.profiles:
+            profile_params = {k: v for k, v in self.profiles[profile].items() if k != 'description'}
+            params.update(profile_params)
+        
+        # Apply custom overrides
+        if custom:
+            params.update(custom)
+        
+        return params
+    
+    def load_template(self, path: str) -> Dict[str, Any]:
+        """Load and cache JSON template"""
+        if path not in self._templates_cache:
+            with open(self.template_dir / path, 'r') as f:
+                self._templates_cache[path] = json.load(f)
+        return json.loads(json.dumps(self._templates_cache[path]))
     
     def fill_template(self, template: Any, values: Dict[str, Any]) -> Any:
-        """Recursively fill template placeholders and resolve @references"""
+        """Fill template with values and resolve @references"""
         if isinstance(template, dict):
             return {k: self.fill_template(v, values) for k, v in template.items()}
         elif isinstance(template, list):
@@ -55,39 +93,26 @@ class ConfigGenerator:
         elif isinstance(template, str):
             # Replace placeholders
             if '{' in template and '}' in template:
-                result = template
                 for key, value in values.items():
-                    placeholder = f"{{{key}}}"
-                    if placeholder in result:
-                        result = result.replace(placeholder, str(value))
-                template = result
-            
-            # Handle template references
+                    template = template.replace(f"{{{key}}}", str(value))
+            # Resolve references
             if template.startswith('@'):
-                ref_path = template[1:]  # Remove @ prefix
-                referenced_template = self.load_template(ref_path)
-                return self.fill_template(referenced_template, values)
-                
+                return self.fill_template(self.load_template(template[1:]), values)
         return template
     
     def format_symbol(self, symbol: str, exchange: str) -> str:
-        """Format symbol for exchange requirements"""
+        """Format symbol for exchange"""
         if exchange.lower() == 'binance':
-            # Clean format for Binance
             return symbol.replace('_SPOT', '').replace('-SWAP', '').replace('-', '')
         return symbol
     
-    def parse_source(self, source: str) -> Tuple[str, str]:
-        """Parse 'exchange:symbol' format"""
-        exchange, symbol = source.split(':', 1)
-        return exchange.lower(), symbol
-    
-    def generate_spread_configs(self, source1: str, source2: str, 
-                              exchange1: str, exchange2: str,
-                              spread_pct: float = None) -> Tuple[Dict, Dict]:
-        """Generate two configs for spread strategy"""
-        _, symbol1 = self.parse_source(source1)
-        _, symbol2 = self.parse_source(source2)
+    def generate_spread_configs(self, source1: str, source2: str, exchange1: str, exchange2: str,
+                              spread_pct: float = None, strategy: str = 'SC',
+                              custom: Dict = None, profile: str = None) -> Tuple[Dict, Dict]:
+        """Generate spread trading configs"""
+        # Parse sources
+        _, symbol1 = source1.split(':', 1)
+        _, symbol2 = source2.split(':', 1)
         
         # Determine spot vs futures
         if '_SPOT' in symbol1:
@@ -97,49 +122,53 @@ class ConfigGenerator:
             spot_sym, spot_ex = symbol2, exchange2
             fut_sym, fut_ex = symbol1, exchange1
         
-        # Format symbols
-        spot_formatted = self.format_symbol(spot_sym, spot_ex)
-        fut_formatted = self.format_symbol(fut_sym, fut_ex)
+        # Get parameters and base values
+        params = self.get_params('spread', strategy, custom, profile)
+        base = self.load_template("base.json")
         
-        # Load the spread base template (with default offsets)
-        base_template = self.load_template("base_spread.json")
-        
-        # Common values for both configs
-        common_values = {
+        common = {
+            'theo_type': 'FAST',
+            'trade_strategy': strategy.upper(),
+            'hedge_strategy': 'HLimit',
             'theo_config_file': 'fast_spread.json',
-            'trade_config_file': 'sc.json',
+            'trade_config_file': 'sc.json' if strategy.upper() == 'SC' else 'mm.json',
             'hedge_config_file': 'hlimit.json',
+            'currency_symbol': '',
+            'currency_exchange': '',
+            'hedge_currency': 'no',
+            'min_size_currency': '0',
             'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
             'spread_pct': spread_pct or 0,
-            'counter': self.counter
+            'counter': self.counter,
+            **params  # Include offset/qty parameters
         }
         
         # Config 1: Trade SPOT, Hedge FUTURES
-        config1 = self.fill_template(base_template, {
-            **common_values,
+        config1 = self.fill_template(base, {
+            **common,
             'id': int(time.time() * 1000) % 100000,
             'trade_account': self.accounts[spot_ex]['spot'],
             'hedge_account': self.accounts[fut_ex]['futures'],
             'theo_comment': f"Trade {spot_sym} hedge {fut_sym}",
             'theo_config_name': f"FAST-SPOT-{self.counter}",
-            'asset_symbol': fut_formatted,
+            'asset_symbol': self.format_symbol(fut_sym, fut_ex),
             'asset_exchange': self.platforms[fut_ex]['futures'],
-            'trade_symbol': spot_formatted,
+            'trade_symbol': self.format_symbol(spot_sym, spot_ex),
             'trade_exchange': self.platforms[spot_ex]['spot'],
             'strategy_type': 'spread_trade_spot'
         })
         
         # Config 2: Trade FUTURES, Hedge SPOT
-        config2 = self.fill_template(base_template, {
-            **common_values,
+        config2 = self.fill_template(base, {
+            **common,
             'id': (int(time.time() * 1000) + 1) % 100000,
             'trade_account': self.accounts[fut_ex]['futures'],
             'hedge_account': self.accounts[spot_ex]['spot'],
             'theo_comment': f"Trade {fut_sym} hedge {spot_sym}",
             'theo_config_name': f"FAST-FUT-{self.counter}",
-            'asset_symbol': spot_formatted,
+            'asset_symbol': self.format_symbol(spot_sym, spot_ex),
             'asset_exchange': self.platforms[spot_ex]['spot'],
-            'trade_symbol': fut_formatted,
+            'trade_symbol': self.format_symbol(fut_sym, fut_ex),
             'trade_exchange': self.platforms[fut_ex]['futures'],
             'strategy_type': 'spread_trade_futures'
         })
@@ -147,34 +176,34 @@ class ConfigGenerator:
         self.counter += 1
         return config1, config2
     
-    def generate_momentum_config(self, source: str, exchange: str,
-                                momentum_pct: float = None) -> Dict:
-        """Generate momentum strategy config"""
-        _, symbol = self.parse_source(source)
+    def generate_momentum_config(self, source: str, exchange: str, momentum_pct: float = None,
+                               strategy: str = 'SC', custom: Dict = None, profile: str = None) -> Dict:
+        """Generate momentum trading config"""
+        _, symbol = source.split(':', 1)
         is_spot = '_SPOT' in symbol
-        symbol_formatted = self.format_symbol(symbol, exchange)
         
-        # Load the momentum base template (with default offsets)
-        base_template = self.load_template("base_momentum.json")
-        
-        # Determine account and platform
+        params = self.get_params('momentum', strategy, custom, profile)
+        base = self.load_template("base.json")
         account = self.accounts[exchange]['spot' if is_spot else 'futures']
         platform = self.platforms[exchange]['spot' if is_spot else 'futures']
         
-        # Fill template
-        config = self.fill_template(base_template, {
+        config = self.fill_template(base, {
             'id': int(time.time() * 1000) % 100000,
-            'theo_config_file': 'fast_momentum.json',
-            'trade_config_file': 'sc.json',
-            'hedge_config_file': 'hmomentum.json',
+            'theo_type': 'FAST',
+            'trade_strategy': strategy.upper(),
+            'hedge_strategy': 'HMomentum',
             'trade_account': account,
             'hedge_account': account,
-            'symbol': symbol_formatted,
+            'theo_config_file': 'fast_momentum.json',
+            'trade_config_file': 'sc.json' if strategy.upper() == 'SC' else 'mm.json',
+            'hedge_config_file': 'hmomentum.json',
+            'symbol': self.format_symbol(symbol, exchange),
             'exchange': platform,
             'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
             'strategy_type': 'momentum',
-            'momentum_pct': momentum_pct or 0,
-            'counter': self.counter
+            'spread_pct': momentum_pct or 0,
+            'counter': self.counter,
+            **params
         })
         
         self.counter += 1
@@ -182,18 +211,12 @@ class ConfigGenerator:
     
     def save_config(self, config: Dict, suffix: str = "") -> Path:
         """Save config to file"""
+        symbol = config.get("theo_config", {}).get("underlyingAssets", {}).get("assetSymbol", "unknown")
+        clean_symbol = symbol.replace('-', '_').replace('/', '_')
+        strategy = config.get("trade_strategy", "SC")
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         
-        # Extract symbol from config for filename
-        symbol = "unknown"
-        if "theo_config" in config:
-            if "underlyingAssets" in config["theo_config"]:
-                symbol = config["theo_config"]["underlyingAssets"].get("assetSymbol", "unknown")
-            elif "tradeAsset" in config["theo_config"]:
-                symbol = config["theo_config"]["tradeAsset"].get("assetSymbol", "unknown")
-        
-        clean_symbol = symbol.replace('-', '_').replace('/', '_')
-        filename = f"trade_config_{clean_symbol}{suffix}_{timestamp}.json"
+        filename = f"trade_config_{clean_symbol}_{strategy}{suffix}_{timestamp}.json"
         filepath = self.output_dir / filename
         
         with open(filepath, 'w') as f:
@@ -202,146 +225,51 @@ class ConfigGenerator:
         logger.info(f"Saved: {filepath.name}")
         return filepath
 
-# Simple API functions
+# API Functions
 def create_spread_configs(source1: str, source2: str, exchange1: str, exchange2: str,
-                         spread_pct: float = None, output_dir: str = "./trading_configs") -> Tuple[Path, Path]:
-    """Create spread strategy configs (returns 2 file paths)"""
-    gen = ConfigGenerator(output_dir)
-    config1, config2 = gen.generate_spread_configs(source1, source2, exchange1, exchange2, spread_pct)
-    
-    path1 = gen.save_config(config1, "_SPOT")
-    path2 = gen.save_config(config2, "_FUT")
-    
-    return path1, path2
+                         spread_pct: float = None, strategy: str = 'SC',
+                         custom: Dict = None, profile: str = None) -> Tuple[Path, Path]:
+    """Create spread configs with optional custom parameters or profile"""
+    gen = ConfigGenerator()
+    config1, config2 = gen.generate_spread_configs(
+        source1, source2, exchange1, exchange2, spread_pct, strategy, custom, profile
+    )
+    return gen.save_config(config1, "_SPOT"), gen.save_config(config2, "_FUT")
 
 def create_momentum_config(source: str, exchange: str, momentum_pct: float = None,
-                          output_dir: str = "./trading_configs") -> Path:
-    """Create momentum strategy config (returns file path)"""
-    gen = ConfigGenerator(output_dir)
-    config = gen.generate_momentum_config(source, exchange, momentum_pct)
-    path = gen.save_config(config, "_MOM")
-    
-    return path
-
-# For alerts.py integration
-def process_spread_alert(source1: str, source2: str, exchange1: str, exchange2: str,
-                        spread_pct: float) -> Tuple[Path, Path]:
-    """Process spread alert and generate configs"""
-    logger.info(f"Spread alert: {source1} vs {source2} @ {spread_pct}%")
-    return create_spread_configs(source1, source2, exchange1, exchange2, spread_pct)
-
-def process_momentum_alert(source: str, exchange: str, momentum_pct: float) -> Path:
-    """Process momentum alert and generate config"""
-    logger.info(f"Momentum alert: {source} @ {momentum_pct}%")
-    return create_momentum_config(source, exchange, momentum_pct)
-
-# Diagnostic function
-def check_templates(template_dir: str = None) -> bool:
-    """Check if all required template files exist"""
-    if template_dir:
-        base_dir = Path(template_dir)
-    else:
-        base_dir = Path(__file__).parent / "config_templates"
-    
-    required_files = [
-        "base_spread.json",
-        "base_momentum.json",
-        "theo_configs/fast_spread.json",
-        "theo_configs/fast_momentum.json",
-        "hedge_strategies/hlimit.json",
-        "hedge_strategies/hmomentum.json",
-        "trade_strategies/sc.json"
-    ]
-    
-    print(f"Checking templates in: {base_dir}")
-    all_exist = True
-    
-    for file in required_files:
-        filepath = base_dir / file
-        if filepath.exists():
-            try:
-                with open(filepath, 'r') as f:
-                    json.load(f)
-                print(f"  ✓ {file}")
-            except json.JSONDecodeError as e:
-                print(f"  ✗ {file} - Invalid JSON: {e}")
-                all_exist = False
-        else:
-            print(f"  ✗ {file} - Not found")
-            all_exist = False
-    
-    return all_exist
+                          strategy: str = 'SC', custom: Dict = None, profile: str = None) -> Path:
+    """Create momentum config with optional custom parameters or profile"""
+    gen = ConfigGenerator()
+    config = gen.generate_momentum_config(source, exchange, momentum_pct, strategy, custom, profile)
+    return gen.save_config(config, "_MOM")
 
 # Testing
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     
-    print("=== TEMPLATE CHECK ===\n")
-    if not check_templates():
-        print("\n❌ Templates missing! Run setup_templates.py first.")
-        print("   python setup_templates.py")
-        exit(1)
+    # Test examples
+    print("=== Testing Config Generation ===\n")
     
-    print("\n=== CONFIG GENERATOR TEST ===\n")
+    # 1. Basic SC spread
+    p1, p2 = create_spread_configs(
+        "binance:BTCUSDT", "binance:BTCUSDT_SPOT", "binance", "binance", 0.85
+    )
+    print(f"✓ Basic SC: {p1.name}, {p2.name}")
     
-    # Test 1: Spread Strategy
-    print("1. Spread Strategy (Binance BTCUSDT):")
+    # 2. MM with custom parameters
+    p3, p4 = create_spread_configs(
+        "binance:ETHUSDT", "binance:ETHUSDT_SPOT", "binance", "binance", 1.2,
+        strategy='MM', custom={'offset_bid': '15', 'bid_qty': '100'}
+    )
+    print(f"✓ MM Custom: {p3.name}, {p4.name}")
+    
+    # 3. Using profile (if strategy_config.json exists)
     try:
-        p1, p2 = create_spread_configs(
-            "binance:BTCUSDT", 
-            "binance:BTCUSDT_SPOT", 
-            "binance", 
-            "binance", 
-            0.85
+        p5 = create_momentum_config(
+            "okx:BTC-USDT-SWAP", "okx", 2.5, strategy='MM', profile='aggressive_mm'
         )
-        print(f"   ✓ {p1.name}")
-        print(f"   ✓ {p2.name}")
-        
-        # Verify offsets are correct for spread
-        with open(p1, 'r') as f:
-            config = json.load(f)
-            print(f"   Spread offsets: bid={config['offset_bid']}, ask={config['offset_ask']}")
-    except Exception as e:
-        print(f"   ✗ Error: {e}")
+        print(f"✓ Profile: {p5.name}")
+    except:
+        print("ℹ️  Profile test skipped (no strategy_config.json)")
     
-    # Test 2: Momentum Strategy  
-    print("\n2. Momentum Strategy (Binance ETHUSDT):")
-    try:
-        p3 = create_momentum_config("binance:ETHUSDT", "binance", 2.5)
-        print(f"   ✓ {p3.name}")
-        
-        # Verify offsets are correct for momentum
-        with open(p3, 'r') as f:
-            config = json.load(f)
-            print(f"   Momentum offsets: bid={config['offset_bid']}, ask={config['offset_ask']}")
-    except Exception as e:
-        print(f"   ✗ Error: {e}")
-    
-    # Test 3: Cross-exchange Spread
-    print("\n3. Cross-Exchange Spread (OKX):")
-    try:
-        p4, p5 = create_spread_configs(
-            "okx:BTC-USDT-SWAP",
-            "okx:BTC-USDT_SPOT",
-            "okx",
-            "okx",
-            1.2
-        )
-        print(f"   ✓ {p4.name}")
-        print(f"   ✓ {p5.name}")
-    except Exception as e:
-        print(f"   ✗ Error: {e}")
-    
-    # Test 4: Symbol Formatting
-    print("\n4. Symbol Formatting Test:")
-    gen = ConfigGenerator()
-    tests = [
-        ("BTCUSDT_SPOT", "binance"),
-        ("BTC-USDT-SWAP", "okx"),
-        ("BTC-USDT", "bybit")
-    ]
-    for symbol, exchange in tests:
-        formatted = gen.format_symbol(symbol, exchange)
-        print(f"   {exchange}: {symbol} → {formatted}")
-    
-    print("\n✅ Testing complete!")
+    print("\n✅ Complete!")
