@@ -1,6 +1,6 @@
 {
-    "comments": "{theo_comment}",
-    "configName": "{theo_config_name}",
+    "comments": "autoGen Spread-{trade_symbol}:{trade_exchange} on {asset_exchange}: {counter}",
+    "configName": "autoS-{trade_symbol}:{trade_exchange} on {asset_exchange}",
     "checkTickersFrequency": 30000,
     "underlyingAssets": {
         "assetSymbol": "{asset_symbol}",

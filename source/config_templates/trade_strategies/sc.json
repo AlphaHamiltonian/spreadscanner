@@ -1,6 +1,6 @@
 {
-    "comments": "Config file for SC",
-    "configName": "SC-{counter}",
+    "comments": "SC auto-{counter}",
+    "configName": "SC-auto",
     "orderType": 0,
     "spikeCheckTime": 0,
     "autoSizing": "no",

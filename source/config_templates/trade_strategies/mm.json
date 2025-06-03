@@ -1,6 +1,6 @@
 {
-    "comments": "Config file for MM",
-    "configName": "MM 10b",
+    "comments": "MM auto-{counter}",
+    "configName": "MM 10b-auto",
     "orderType": 0,
     "updateFrequencyTick": "10b",
     "postOnlyOption": "Yes",

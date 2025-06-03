@@ -1,11 +1,11 @@
 {
-    "comments": "Config file for HMomentum",
-    "configName": "HMomentum BPS",
+    "comments": "HMomentum auto-{counter}",
+    "configName": "HMomentum auto",
     "icebergParts": 1,
     "delayHedgeTime": 0,
     "trailingStop": "150b",
     "trailingStep": "5b",
     "trailingLimit": "20b",
-    "takeProfitTrigger": 100,
+    "takeProfitTrigger": "100b",
     "takeProfitTrailingStop": "5b"
 }

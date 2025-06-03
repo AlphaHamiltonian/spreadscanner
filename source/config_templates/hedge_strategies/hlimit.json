@@ -1,6 +1,6 @@
 {
-    "comments": "HLimit 1",
-    "configName": "HLimit1 - 2sec",
+    "comments": "HLimit auto-{counter}",
+    "configName": "HLimit auto- 2sec",
     "orderType": 1,
     "cutlossTimeout": 3000,
     "cutlossBPS": 50,

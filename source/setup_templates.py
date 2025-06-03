@@ -18,7 +18,7 @@ def create_templates(overwrite=False):
     templates = {
         "base.json": {
             "request_type": "scan",
-            "id": "{id}",
+#            "id": "{id}",
             "theo_type": "{theo_type}",
             "trade_strategy": "{trade_strategy}",
             "hedge_strategy": "{hedge_strategy}",
@@ -41,8 +41,8 @@ def create_templates(overwrite=False):
         },
         
         "theo_configs/fast_spread.json": {
-            "comments": "{theo_comment}",
-            "configName": "{theo_config_name}",
+            "comments": "autoGen Spread-{trade_symbol}:{trade_exchange} on {asset_exchange}: {counter}",
+            "configName": "autoS-{trade_symbol}:{trade_exchange} on {asset_exchange}",
             "checkTickersFrequency": 30000,
             "underlyingAssets": {
                 "assetSymbol": "{asset_symbol}",
@@ -63,8 +63,8 @@ def create_templates(overwrite=False):
         },
         
         "theo_configs/fast_momentum.json": {
-            "comments": "Momentum config for {symbol}",
-            "configName": "FAST-MOM-{counter}",
+            "comments": "Momentum autoGen-{symbol}:{exchange}-{counter}",
+            "configName": "autoM-{symbol}:{exchange}",
             "checkTickersFrequency": 30000,
             "underlyingAssets": {
                 "assetSymbol": "{symbol}",
@@ -74,7 +74,7 @@ def create_templates(overwrite=False):
                 "hedgeAsset": "no",
                 "hedgeCurrency": "no",
                 "minSizeOrderAsset": "6u",
-                "minSizeOrderCurrency": "0"
+                "minSizeOrderCurrency": "6u"
             },
             "tradeAsset": {
                 "assetSymbol": "{symbol}",
@@ -85,8 +85,8 @@ def create_templates(overwrite=False):
         },
         
         "hedge_strategies/hlimit.json": {
-            "comments": "HLimit 1",
-            "configName": "HLimit1 - 2sec",
+            "comments": "HLimit auto-{counter}",
+            "configName": "HLimit auto- 2sec",
             "orderType": 1,
             "cutlossTimeout": 3000,
             "cutlossBPS": 50,
@@ -94,20 +94,20 @@ def create_templates(overwrite=False):
         },
         
         "hedge_strategies/hmomentum.json": {
-            "comments": "Config file for HMomentum",
-            "configName": "HMomentum BPS",
+            "comments": "HMomentum auto-{counter}",
+            "configName": "HMomentum auto",
             "icebergParts": 1,
             "delayHedgeTime": 0,
             "trailingStop": "150b",
             "trailingStep": "5b",
             "trailingLimit": "20b",
-            "takeProfitTrigger": 100,
+            "takeProfitTrigger": "100b",
             "takeProfitTrailingStop": "5b"
         },
         
         "trade_strategies/sc.json": {
-            "comments": "Config file for SC",
-            "configName": "SC-{counter}",
+            "comments": "SC auto-{counter}",
+            "configName": "SC-auto",
             "orderType": 0,
             "spikeCheckTime": 0,
             "autoSizing": "no",
@@ -116,8 +116,8 @@ def create_templates(overwrite=False):
         },
         
         "trade_strategies/mm.json": {
-            "comments": "Config file for MM",
-            "configName": "MM 10b",
+            "comments": "MM auto-{counter}",
+            "configName": "MM 10b-auto",
             "orderType": 0,
             "updateFrequencyTick": "10b",
             "postOnlyOption": "Yes",
@@ -130,55 +130,43 @@ def create_templates(overwrite=False):
     strategy_config = {
         "strategy_parameters": {
             "spread": {
-                "SC": {
-                    "offset_bid": "0",
-                    "offset_ask": "0",
-                    "bid_qty": "0",
-                    "ask_qty": "0"
-                },
                 "MM": {
-                    "offset_bid": "2",
-                    "offset_ask": "2",
-                    "bid_qty": "10",
-                    "ask_qty": "10"
+                    "offset_bid": "-100b",
+                    "offset_ask": "100b",
+                    "bid_qty": "100u",
+                    "ask_qty": "100u"
                 }
             },
             "momentum": {
                 "SC": {
-                    "offset_bid": "0",
-                    "offset_ask": "0",
-                    "bid_qty": "0",
-                    "ask_qty": "0"
-                },
-                "MM": {
-                    "offset_bid": "5",
-                    "offset_ask": "5",
-                    "bid_qty": "20",
-                    "ask_qty": "20"
+                    "offset_bid": "-100b",
+                    "offset_ask": "100b",
+                    "bid_qty": "100u",
+                    "ask_qty": "100u"
                 }
             }
         },
         "custom_profiles": {
-            "aggressive_mm": {
-                "offset_bid": "10",
-                "offset_ask": "10",
-                "bid_qty": "50",
-                "ask_qty": "50",
-                "description": "Aggressive market making"
+            "takeout": {
+                "offset_bid": "10b",
+                "offset_ask": "-10b",
+                "bid_qty": "100u",
+                "ask_qty": "100u",
+                "description": "Take out"
             },
             "conservative_mm": {
-                "offset_bid": "1",
-                "offset_ask": "1",
-                "bid_qty": "5",
-                "ask_qty": "5",
-                "description": "Conservative market making"
+                "offset_bid": "-200b",
+                "offset_ask": "200b",
+                "bid_qty": "100u",
+                "ask_qty": "100u",
+                "description": "Conservative"
             },
-            "scalper": {
-                "offset_bid": "0.5",
-                "offset_ask": "0.5",
-                "bid_qty": "100",
-                "ask_qty": "100",
-                "description": "High frequency scalping"
+            "aggressive_mm": {
+                "offset_bid": "-50b",
+                "offset_ask": "50b",
+                "bid_qty": "100u",
+                "ask_qty": "100u",
+                "description": "Agressive"
             }
         }
     }

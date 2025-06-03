@@ -1,6 +1,6 @@
 {
-    "comments": "Momentum config for {symbol}",
-    "configName": "FAST-MOM-{counter}",
+    "comments": "Momentum autoGen-{symbol}:{exchange}-{counter}",
+    "configName": "autoM-{symbol}:{exchange}",
     "checkTickersFrequency": 30000,
     "underlyingAssets": {
         "assetSymbol": "{symbol}",
@@ -10,7 +10,7 @@
         "hedgeAsset": "no",
         "hedgeCurrency": "no",
         "minSizeOrderAsset": "6u",
-        "minSizeOrderCurrency": "0"
+        "minSizeOrderCurrency": "6u"
     },
     "tradeAsset": {
         "assetSymbol": "{symbol}",

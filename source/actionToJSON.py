@@ -136,7 +136,7 @@ class ConfigGenerator:
             'currency_symbol': '',
             'currency_exchange': '',
             'hedge_currency': 'no',
-            'min_size_currency': '0',
+            'min_size_currency': '6u',
             'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
             'spread_pct': spread_pct or 0,
             'counter': self.counter,
@@ -150,7 +150,6 @@ class ConfigGenerator:
             'trade_account': self.accounts[spot_ex]['spot'],
             'hedge_account': self.accounts[fut_ex]['futures'],
             'theo_comment': f"Trade {spot_sym} hedge {fut_sym}",
-            'theo_config_name': f"FAST-SPOT-{self.counter}",
             'asset_symbol': self.format_symbol(fut_sym, fut_ex),
             'asset_exchange': self.platforms[fut_ex]['futures'],
             'trade_symbol': self.format_symbol(spot_sym, spot_ex),
@@ -165,7 +164,6 @@ class ConfigGenerator:
             'trade_account': self.accounts[fut_ex]['futures'],
             'hedge_account': self.accounts[spot_ex]['spot'],
             'theo_comment': f"Trade {fut_sym} hedge {spot_sym}",
-            'theo_config_name': f"FAST-FUT-{self.counter}",
             'asset_symbol': self.format_symbol(spot_sym, spot_ex),
             'asset_exchange': self.platforms[spot_ex]['spot'],
             'trade_symbol': self.format_symbol(fut_sym, fut_ex),
@@ -250,26 +248,19 @@ if __name__ == "__main__":
     # Test examples
     print("=== Testing Config Generation ===\n")
     
-    # 1. Basic SC spread
+    # 1. MM with custom parameters
     p1, p2 = create_spread_configs(
-        "binance:BTCUSDT", "binance:BTCUSDT_SPOT", "binance", "binance", 0.85
-    )
-    print(f"✓ Basic SC: {p1.name}, {p2.name}")
-    
-    # 2. MM with custom parameters
-    p3, p4 = create_spread_configs(
         "binance:ETHUSDT", "binance:ETHUSDT_SPOT", "binance", "binance", 1.2,
         strategy='MM', custom={'offset_bid': '15', 'bid_qty': '100'}
     )
-    print(f"✓ MM Custom: {p3.name}, {p4.name}")
+    print(f"✓ MM Custom: {p1.name}, {p2.name}")
     
     # 3. Using profile (if strategy_config.json exists)
-    try:
-        p5 = create_momentum_config(
-            "okx:BTC-USDT-SWAP", "okx", 2.5, strategy='MM', profile='aggressive_mm'
-        )
-        print(f"✓ Profile: {p5.name}")
-    except:
-        print("ℹ️  Profile test skipped (no strategy_config.json)")
+
+    p5 = create_momentum_config(
+        "okx:BTC-USDT-SWAP", "okx", 2.5, strategy='SC', profile='takeout'
+    )
+    print(f"✓ Profile: {p5.name}")
+
     
     print("\n✅ Complete!")
