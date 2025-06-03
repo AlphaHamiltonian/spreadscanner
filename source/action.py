@@ -1,4 +1,6 @@
 import requests
+import json
+from source.actionToJSON import create_spread_configs
 
 # --------------------------------------------------------------------------- #
 # Configuration – kept identical to your existing variable names
@@ -45,9 +47,9 @@ def send_message(message):
         print(f"Error sending Telegram message: {e}")
         return False
 
-def send_trade(message):
+def send_trade(source1, source2, exchange1, exchange2, spread_pct):
     print("connecting")
-    """Send a message via Telegram bot."""
+    """Generate trading configs and send via Telegram bot."""
     if not config.TELEGRAM_ENABLED:
         print("Telegram notifications are disabled.")
         return False
@@ -57,22 +59,39 @@ def send_trade(message):
         return False
     
     try:
+        # Generate spread configs
+        config1_path, config2_path = create_spread_configs(
+            source1, source2, exchange1, exchange2, spread_pct, strategy='SC'
+        )
+        
+        # Read the generated configs
+        with open(config1_path, 'r') as f:
+            config1 = json.load(f)
+        with open(config2_path, 'r') as f:
+            config2 = json.load(f)
+        
+        # Create message with both configs
+        message = f"Trading configs generated for {source1} vs {source2} (spread: {spread_pct:.2f}%)\n\n"
+        message += f"Config 1:\n```json\n{json.dumps(config1, indent=2)}\n```\n\n"
+        message += f"Config 2:\n```json\n{json.dumps(config2, indent=2)}\n```"
+        
+        # Send message
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         data = {
             "chat_id": TELEGRAM_CHAT_ID,
             "text": message,
-            "parse_mode": "HTML"  # Enable HTML formatting
+            "parse_mode": "Markdown"  # Use Markdown for code blocks
         }
         response = requests.post(url, data=data, timeout=10)
         
         if response.status_code == 200:
-            print(f"Telegram message sent successfully.")
+            print(f"Trade configs sent successfully.")
             return True
         else:
-            print(f"Failed to send Telegram message. Status code: {response.status_code}")
+            print(f"Failed to send trade configs. Status code: {response.status_code}")
             print(f"Response: {response.text}")
             return False
             
     except Exception as e:
-        print(f"Error sending Telegram message: {e}")
+        print(f"Error sending trade configs: {e}")
         return False

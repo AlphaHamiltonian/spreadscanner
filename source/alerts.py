@@ -46,7 +46,7 @@ class AlertManager:
                 notification_message = f"{source1} vs {source2}: {spread_pct:.2f}% below lower limit ({Config.LOWER_LIMIT}%)"
             
             if exchange1 == exchange2 and exchange1 == "binance":
-                if send_trade(f"mock trade: {notification_message}"):
+                if send_trade(source1, source2, exchange1, exchange2, spread_pct):
                     self.last_notification_time[asset_pair_key] = current_time
                     logger.info(f"mock trade sent for {asset_pair_key}. Next notification in 30 minutes.")
                     if len(unique_seconds) >= Config.NUMBER_OF_SEC_THRESHOLD:
