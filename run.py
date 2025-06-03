@@ -14,6 +14,7 @@ from source.action import send_message, set_broadcast_method
 from source.websocket_server import trading_signal_server
 
 
+
 # Disable WebSocket trace for cleaner logs
 websocket.enableTrace(False)
 
@@ -39,22 +40,26 @@ def run_spread_calculator():
         
         # Calculate 5 times per second
         time.sleep(0.5)
-def start_websocket_server(port=8765):
+
+def start_websocket_server(port=8765, max_wait=10):
     """Start the WebSocket server for broadcasting trading signals"""
     try:
         logger.info(f"Starting WebSocket server on port {port}")
         trading_signal_server.port = port
         trading_signal_server.run_in_thread()
         
-        # Give server time to start
-        time.sleep(2)
+        # Wait for server to actually start with timeout
+        start_time = time.time()
+        while time.time() - start_time < max_wait:
+            if trading_signal_server.is_running and trading_signal_server.loop:
+                # Give the event loop a moment to fully initialize
+                time.sleep(0.5)
+                logger.info(f"WebSocket server successfully started on port {port}")
+                return True
+            time.sleep(0.1)
         
-        if trading_signal_server.is_running:
-            logger.info(f"WebSocket server successfully started on port {port}")
-            return True
-        else:
-            logger.error("Failed to start WebSocket server")
-            return False
+        logger.error(f"WebSocket server failed to start within {max_wait} seconds")
+        return False
     except Exception as e:
         logger.error(f"Error starting WebSocket server: {e}")
         return False
@@ -241,14 +246,25 @@ def main():
     parser = argparse.ArgumentParser(description='Crypto Exchange Monitor')
     parser.add_argument('--headless', action='store_true', 
                         help='Run in headless mode without UI (for servers)')
+    parser.add_argument('--broadcast', 
+                        choices=['telegram', 'websocket', 'both'],
+                        default='websocket',
+                        help='Broadcast method for trading signals (default: websocket)')
+    parser.add_argument('--websocket-port', 
+                        type=int, 
+                        default=8765,
+                        help='WebSocket server port (default: 8765)')
     args = parser.parse_args()
+    
     # Set broadcast method
-    set_broadcast_method(args.broadcast)    
+    set_broadcast_method(args.broadcast)
+    
     # Run in either headless or UI mode
     if args.headless:
-        config.TELEGRAM_ENABLED = True
-        send_message("Turning on telegram notifications")
-        run_headless()
+        config.TELEGRAM_ENABLED = True if args.broadcast in ['telegram', 'both'] else False
+        if config.TELEGRAM_ENABLED:
+            send_message("Starting exchange monitor with Telegram notifications")
+        run_headless(args.websocket_port)
     else:
         config.TELEGRAM_ENABLED = False
         run_with_ui()

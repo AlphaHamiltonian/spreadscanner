@@ -5,7 +5,6 @@ import logging
 import threading
 from datetime import datetime
 from typing import Set, Dict, Any
-import orjson
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +29,9 @@ class TradingSignalServer:
             'server_start_time': None
         }
         
+        # Store last signal for new clients
+        self.last_signal = None
+        
     async def register_client(self, websocket: websockets.WebSocketServerProtocol):
         """Register a new client connection"""
         self.clients.add(websocket)
@@ -41,10 +43,17 @@ class TradingSignalServer:
         welcome_msg = {
             "type": "welcome",
             "timestamp": datetime.utcnow().isoformat(),
-            "server_version": "1.0.0",
-            "message": "Connected to Trading Signal Server"
+            "data": {
+                "server_version": "1.0.0",
+                "message": "Connected to Trading Signal Server"
+            }
         }
         await websocket.send(json.dumps(welcome_msg))
+        
+        # Send last signal if available (for clients that connect after a signal was sent)
+        if self.last_signal:
+            await websocket.send(json.dumps(self.last_signal))
+            logger.info(f"Sent last signal to new client: {client_info}")
         
     async def unregister_client(self, websocket: websockets.WebSocketServerProtocol):
         """Remove a client connection"""
@@ -55,18 +64,21 @@ class TradingSignalServer:
             
     async def broadcast_signal(self, signal_data: Dict[str, Any]):
         """Broadcast trading signal to all connected clients"""
-        if not self.clients:
-            logger.warning("No clients connected to broadcast signal")
-            return
-            
-        # Add metadata
+        # Create message
         message = {
             "type": "trading_signal",
             "timestamp": datetime.utcnow().isoformat(),
             "data": signal_data
         }
         
-        message_json = orjson.dumps(message).decode('utf-8')
+        # Store as last signal
+        self.last_signal = message
+        
+        if not self.clients:
+            logger.warning("No clients connected to broadcast signal")
+            return
+        
+        message_json = json.dumps(message)
         
         # Send to all connected clients
         disconnected_clients = set()
@@ -105,6 +117,7 @@ class TradingSignalServer:
         for client in self.clients:
             try:
                 await client.send(message_json)
+                self.stats['messages_sent'] += 1
             except:
                 disconnected_clients.add(client)
                 
@@ -208,6 +221,14 @@ class TradingSignalServer:
     def queue_trading_signal(self, source1: str, source2: str, exchange1: str, exchange2: str, 
                            spread_pct: float, config1: Dict, config2: Dict):
         """Queue a trading signal to be broadcast"""
+        if not self.is_running:
+            logger.warning("WebSocket server not running, cannot queue trading signal")
+            return False
+            
+        if not self.loop:
+            logger.warning("WebSocket event loop not initialized, cannot queue trading signal")
+            return False
+            
         signal_data = {
             "source1": source1,
             "source2": source2,
@@ -225,30 +246,51 @@ class TradingSignalServer:
             'data': signal_data
         }
         
-        # Queue the message for async processing
-        if self.loop and self.is_running:
-            asyncio.run_coroutine_threadsafe(
+        try:
+            # Queue the message for async processing
+            future = asyncio.run_coroutine_threadsafe(
                 self.message_queue.put(message),
                 self.loop
             )
+            # Wait a bit to ensure it was queued (with timeout)
+            future.result(timeout=1.0)
+            logger.info(f"Trading signal queued successfully: {source1} vs {source2}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to queue trading signal: {e}")
+            return False
             
     def queue_spread_alert(self, message: str, spread_data: Dict[str, Any] = None):
         """Queue a spread alert to be broadcast"""
+        if not self.is_running:
+            logger.warning("WebSocket server not running, cannot queue alert")
+            return False
+            
+        if not self.loop:
+            logger.warning("WebSocket event loop not initialized, cannot queue alert")
+            return False
+            
         alert_data = {
             "message": message,
-            "spread_data": spread_data
+            "spread_data": spread_data if spread_data else {}
         }
         
-        message = {
+        message_obj = {
             'type': 'alert',
             'data': alert_data
         }
         
-        if self.loop and self.is_running:
-            asyncio.run_coroutine_threadsafe(
-                self.message_queue.put(message),
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self.message_queue.put(message_obj),
                 self.loop
             )
+            future.result(timeout=1.0)
+            logger.info(f"Alert queued successfully: {message}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to queue alert: {e}")
+            return False
             
     def run_in_thread(self):
         """Run the server in a separate thread"""
@@ -284,6 +326,24 @@ class TradingSignalServer:
             self.thread.join(timeout=5)
             
         logger.info("WebSocket server stopped")
+        
+    def has_clients(self) -> bool:
+        """Check if any clients are connected"""
+        return len(self.clients) > 0
+
+    def get_client_info(self) -> list:
+        """Get information about connected clients"""
+        client_info = []
+        for client in self.clients:
+            try:
+                info = {
+                    "address": f"{client.remote_address[0]}:{client.remote_address[1]}",
+                    "connected": True
+                }
+                client_info.append(info)
+            except:
+                pass
+        return client_info
         
     def get_stats(self) -> Dict[str, Any]:
         """Get server statistics"""
