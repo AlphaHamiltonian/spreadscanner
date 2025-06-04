@@ -120,9 +120,12 @@ class TradingSignalServer:
         """Remove a client connection"""
         if websocket in self.clients:
             self.clients.remove(websocket)
-            client_info = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
-            logger.info(f"Client disconnected: {client_info}")
-            
+            if websocket.remote_address:
+                client_info = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
+                logger.info(f"Client disconnected: {client_info}")
+            else:
+                logger.info("Client disconnected: Unknown address")
+
     async def broadcast_signal(self, signal_data: Dict[str, Any]):
         """Broadcast trading signal to all connected clients"""
         # Create message
