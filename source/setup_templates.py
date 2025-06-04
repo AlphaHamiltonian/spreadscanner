@@ -40,8 +40,8 @@ def create_templates(overwrite=False):
         },
         
         "theo_configs/fast_spread.json": {
-            "comments": "autoGen Spread-{trade_symbol}:{trade_exchange_short} on {asset_exchange_short}: {counter}",
-            "configName": "autoS-{trade_symbol}:{trade_exchange_short} on {asset_exchange_short}",
+            "comments": "autoGen Spread-{trade_symbol}-{trade_exchange_short} on {asset_exchange_short}- {counter}",
+            "configName": "autoS-{trade_symbol}-{trade_exchange_short} on {asset_exchange_short}",
             "checkTickersFrequency": 30000,
             "underlyingAssets": {
                 "assetSymbol": "{asset_symbol}",
