@@ -293,7 +293,7 @@ class TradingSignalServer:
         await asyncio.Future()  # Run forever
         
     def queue_trading_signal(self, source1: str, source2: str, exchange1: str, exchange2: str, 
-                           spread_pct: float, config1: Dict, config2: Dict):
+                           spread_pct: float, config1: Dict):#, config2: Dict):
         """Queue a trading signal to be broadcast"""
         if not self.is_running:
             logger.warning("WebSocket server not running, cannot queue trading signal")
@@ -311,7 +311,7 @@ class TradingSignalServer:
             "spread_pct": spread_pct,
             "configs": {
                 "config1": config1,
-                "config2": config2
+            #    "config2": config2
             }
         }
         

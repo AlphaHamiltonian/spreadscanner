@@ -131,7 +131,7 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct):
         # 5. Handle WebSocket
         if BROADCAST_METHOD in ["websocket", "both"]:
             trading_signal_server.queue_trading_signal(
-                source1, source2, exchange1, exchange2, spread_pct, config1, config2
+                source1, source2, exchange1, exchange2, spread_pct, config1#, config2
             )
             print("Trade signal queued for WebSocket broadcast")
             websocket_success = True
