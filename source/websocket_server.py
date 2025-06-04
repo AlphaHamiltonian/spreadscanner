@@ -3,23 +3,31 @@ import websockets
 import json
 import logging
 import threading
+import ssl
+import pathlib
 from datetime import datetime
-from typing import Set, Dict, Any
+from typing import Set, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
 class TradingSignalServer:
-    """WebSocket server for broadcasting trading signals"""
+    """WebSocket server for broadcasting trading signals with SSL support"""
     
-    def __init__(self, host: str = "0.0.0.0", port: int = 8765):
+    def __init__(self, host: str = "0.0.0.0", port: int = 8765, use_ssl: bool = True):
         self.host = host
         self.port = port
+        self.use_ssl = use_ssl
         self.clients: Set[websockets.WebSocketServerProtocol] = set()
         self.server = None
         self.loop = None
         self.thread = None
         self.is_running = False
         self.message_queue = asyncio.Queue()
+        
+        # SSL Configuration
+        self.ssl_context = None
+        if use_ssl:
+            self.ssl_context = self._create_ssl_context()
         
         # Statistics
         self.stats = {
@@ -31,6 +39,58 @@ class TradingSignalServer:
         
         # Store last signal for new clients
         self.last_signal = None
+        
+    def _create_ssl_context(self) -> Optional[ssl.SSLContext]:
+        """Create SSL context for secure WebSocket connections"""
+        try:
+            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            
+            # Look for certificate files in the project directory
+            cert_path = pathlib.Path("server.crt")
+            key_path = pathlib.Path("server.key")
+            
+            # If certificates don't exist in root, check source directory
+            if not cert_path.exists():
+                cert_path = pathlib.Path("source/server.crt")
+                key_path = pathlib.Path("source/server.key")
+            
+            # If still not found, create self-signed certificate
+            if not cert_path.exists() or not key_path.exists():
+                logger.warning("SSL certificate files not found. Creating self-signed certificate...")
+                self._create_self_signed_cert()
+                cert_path = pathlib.Path("server.crt")
+                key_path = pathlib.Path("server.key")
+            
+            ssl_context.load_cert_chain(cert_path, key_path)
+            return ssl_context
+            
+        except Exception as e:
+            logger.error(f"Failed to create SSL context: {e}")
+            logger.warning("Falling back to non-SSL WebSocket server")
+            self.use_ssl = False
+            return None
+    
+    def _create_self_signed_cert(self):
+        """Create a self-signed certificate for development/testing"""
+        try:
+            import subprocess
+            
+            # Generate self-signed certificate using openssl
+            subprocess.run([
+                "openssl", "req", "-x509", "-newkey", "rsa:4096",
+                "-keyout", "server.key", "-out", "server.crt",
+                "-days", "365", "-nodes", "-subj",
+                "/C=US/ST=State/L=City/O=Organization/CN=localhost"
+            ], check=True, capture_output=True)
+            
+            logger.info("Created self-signed SSL certificate")
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to create self-signed certificate: {e}")
+            raise
+        except FileNotFoundError:
+            logger.error("OpenSSL not found. Please install OpenSSL or provide SSL certificates")
+            raise
         
     async def register_client(self, websocket: websockets.WebSocketServerProtocol):
         """Register a new client connection"""
@@ -45,7 +105,8 @@ class TradingSignalServer:
             "timestamp": datetime.utcnow().isoformat(),
             "data": {
                 "server_version": "1.0.0",
-                "message": "Connected to Trading Signal Server"
+                "message": "Connected to Trading Signal Server",
+                "secure": self.use_ssl
             }
         }
         await websocket.send(json.dumps(welcome_msg))
@@ -204,16 +265,26 @@ class TradingSignalServer:
         # Start message processor
         asyncio.create_task(self.message_processor())
         
-        # Start WebSocket server
-        self.server = await websockets.serve(
-            self.handle_client,
-            self.host,
-            self.port,
-            ping_interval=20,
-            ping_timeout=10
-        )
-        
-        logger.info(f"WebSocket server started on {self.host}:{self.port}")
+        # Start WebSocket server with or without SSL
+        if self.use_ssl and self.ssl_context:
+            self.server = await websockets.serve(
+                self.handle_client,
+                self.host,
+                self.port,
+                ssl=self.ssl_context,
+                ping_interval=20,
+                ping_timeout=10
+            )
+            logger.info(f"Secure WebSocket server (WSS) started on {self.host}:{self.port}")
+        else:
+            self.server = await websockets.serve(
+                self.handle_client,
+                self.host,
+                self.port,
+                ping_interval=20,
+                ping_timeout=10
+            )
+            logger.info(f"WebSocket server (WS) started on {self.host}:{self.port}")
         
         # Keep server running
         await asyncio.Future()  # Run forever
@@ -353,5 +424,5 @@ class TradingSignalServer:
             'uptime_seconds': (datetime.utcnow() - self.stats['server_start_time']).total_seconds() if self.stats['server_start_time'] else 0
         }
 
-# Global server instance
-trading_signal_server = TradingSignalServer()
+# Global server instance - now with SSL by default
+trading_signal_server = TradingSignalServer(use_ssl=True)

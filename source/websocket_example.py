@@ -2,19 +2,21 @@
 """
 Example WebSocket client for receiving trading signals from the Exchange Monitor server.
 This shows how to connect to the server and handle different message types.
+Now supports both ws:// and wss:// connections.
 """
 
 import asyncio
 import websockets
 import json
 import logging
+import ssl
 from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class TradingSignalClient:
-    def __init__(self, server_url="ws://localhost:8765"):
+    def __init__(self, server_url="wss://localhost:8765"):
         self.server_url = server_url
         self.running = False
         
@@ -54,6 +56,7 @@ class TradingSignalClient:
             if msg_type == 'welcome':
                 logger.info(f"Connected to server: {msg['data']['message']}")
                 logger.info(f"Server version: {msg['data']['server_version']}")
+                logger.info(f"Connection secure: {msg['data'].get('secure', False)}")
                 
                 # Subscribe to all signals
                 subscribe_msg = {
@@ -89,6 +92,17 @@ class TradingSignalClient:
             
         return None
         
+    def _create_ssl_context(self):
+        """Create SSL context for connecting to secure WebSocket server"""
+        ssl_context = ssl.create_default_context()
+        
+        # For self-signed certificates (development/testing only!)
+        # Remove these lines in production and use proper certificates
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        
+        return ssl_context
+        
     async def run(self):
         """Main client loop"""
         self.running = True
@@ -98,32 +112,18 @@ class TradingSignalClient:
             try:
                 logger.info(f"Connecting to {self.server_url}...")
                 
-                async with websockets.connect(self.server_url) as websocket:
-                    logger.info("Connected successfully!")
-                    reconnect_delay = 5  # Reset delay on successful connection
-                    
-                    # Send periodic pings
-                    async def send_pings():
-                        while self.running:
-                            await asyncio.sleep(30)
-                            try:
-                                ping_msg = {"type": "ping"}
-                                await websocket.send(json.dumps(ping_msg))
-                            except:
-                                break
-                                
-                    # Start ping task
-                    ping_task = asyncio.create_task(send_pings())
-                    
-                    try:
-                        # Handle messages
-                        async for message in websocket:
-                            response = await self.handle_message(message)
-                            if response:
-                                await websocket.send(response)
-                                
-                    finally:
-                        ping_task.cancel()
+                # Determine if we need SSL
+                if self.server_url.startswith("wss://"):
+                    ssl_context = self._create_ssl_context()
+                    async with websockets.connect(
+                        self.server_url, 
+                        ssl=ssl_context
+                    ) as websocket:
+                        await self._handle_connection(websocket, reconnect_delay)
+                else:
+                    # Non-SSL connection
+                    async with websockets.connect(self.server_url) as websocket:
+                        await self._handle_connection(websocket, reconnect_delay)
                         
             except websockets.exceptions.ConnectionClosed:
                 logger.warning("Connection closed by server")
@@ -135,6 +135,34 @@ class TradingSignalClient:
                 await asyncio.sleep(reconnect_delay)
                 reconnect_delay = min(reconnect_delay * 1.5, 60)  # Exponential backoff
                 
+    async def _handle_connection(self, websocket, reconnect_delay):
+        """Handle an established WebSocket connection"""
+        logger.info("Connected successfully!")
+        reconnect_delay = 5  # Reset delay on successful connection
+        
+        # Send periodic pings
+        async def send_pings():
+            while self.running:
+                await asyncio.sleep(30)
+                try:
+                    ping_msg = {"type": "ping"}
+                    await websocket.send(json.dumps(ping_msg))
+                except:
+                    break
+                    
+        # Start ping task
+        ping_task = asyncio.create_task(send_pings())
+        
+        try:
+            # Handle messages
+            async for message in websocket:
+                response = await self.handle_message(message)
+                if response:
+                    await websocket.send(response)
+                    
+        finally:
+            ping_task.cancel()
+            
     def stop(self):
         """Stop the client"""
         self.running = False
@@ -143,8 +171,13 @@ async def main():
     """Example usage"""
     import sys
     
-    # Get server URL from command line or use default
-    server_url = sys.argv[1] if len(sys.argv) > 1 else "ws://localhost:8765"
+    # Get server URL from command line or use default secure connection
+    server_url = sys.argv[1] if len(sys.argv) > 1 else "wss://localhost:8765"
+    
+    # For backward compatibility, also support ws:// URLs
+    if not server_url.startswith(("ws://", "wss://")):
+        # Default to secure connection
+        server_url = f"wss://{server_url}"
     
     client = TradingSignalClient(server_url)
     

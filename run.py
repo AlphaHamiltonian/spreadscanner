@@ -41,11 +41,21 @@ def run_spread_calculator():
         # Calculate 5 times per second
         time.sleep(0.5)
 
-def start_websocket_server(port=8765, max_wait=10):
-    """Start the WebSocket server for broadcasting trading signals"""
+def start_websocket_server(port=8765, use_ssl=True, max_wait=10):
+    """Start the WebSocket server for broadcasting trading signals with SSL support"""
     try:
-        logger.info(f"Starting WebSocket server on port {port}")
+        logger.info(f"Starting {'secure ' if use_ssl else ''}WebSocket server on port {port}")
+        
+        # Configure the global server instance
         trading_signal_server.port = port
+        trading_signal_server.use_ssl = use_ssl
+        
+        # If we need to change SSL setting, recreate the SSL context
+        if use_ssl and not trading_signal_server.ssl_context:
+            trading_signal_server.ssl_context = trading_signal_server._create_ssl_context()
+        elif not use_ssl:
+            trading_signal_server.ssl_context = None
+            
         trading_signal_server.run_in_thread()
         
         # Wait for server to actually start with timeout
@@ -54,7 +64,8 @@ def start_websocket_server(port=8765, max_wait=10):
             if trading_signal_server.is_running and trading_signal_server.loop:
                 # Give the event loop a moment to fully initialize
                 time.sleep(0.5)
-                logger.info(f"WebSocket server successfully started on port {port}")
+                protocol = "wss" if use_ssl else "ws"
+                logger.info(f"WebSocket server successfully started on {protocol}://localhost:{port}")
                 return True
             time.sleep(0.1)
         
@@ -66,12 +77,12 @@ def start_websocket_server(port=8765, max_wait=10):
 #---------------------------------------------
 # Headless Mode Functions
 #---------------------------------------------
-def run_headless(websocket_port=8765):
+def run_headless(websocket_port=8765, use_ssl=True):
     """Run the application in headless mode without UI"""
 
     from source.headless import HeadlessMonitor
     # Start WebSocket server
-    if start_websocket_server(websocket_port):
+    if start_websocket_server(websocket_port, use_ssl):
         logger.info("WebSocket server started successfully")
         # Set broadcast method to websocket since we're in headless mode
         set_broadcast_method("websocket")
@@ -254,17 +265,23 @@ def main():
                         type=int, 
                         default=8765,
                         help='WebSocket server port (default: 8765)')
+    parser.add_argument('--no-ssl', 
+                        action='store_true',
+                        help='Disable SSL for WebSocket server (use ws:// instead of wss://)')
     args = parser.parse_args()
     
     # Set broadcast method
     set_broadcast_method(args.broadcast)
+    
+    # Determine if we should use SSL
+    use_ssl = not args.no_ssl
     
     # Run in either headless or UI mode
     if args.headless:
         config.TELEGRAM_ENABLED = True if args.broadcast in ['telegram', 'both'] else False
         if config.TELEGRAM_ENABLED:
             send_message("Starting exchange monitor with Telegram notifications")
-        run_headless(args.websocket_port)
+        run_headless(args.websocket_port, use_ssl)
     else:
         config.TELEGRAM_ENABLED = False
         run_with_ui()
