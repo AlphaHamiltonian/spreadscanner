@@ -3,8 +3,8 @@
   "theo_type": "FAST",
   "trade_strategy": "SC",
   "hedge_strategy": "HMomentum",
-  "trade_account": "binfut_10",
-  "hedge_account": "binfut_10",
+  "trade_account": "bin_h10",
+  "hedge_account": "bin_h10",
   "trade_times": "0",
   "offset_bid": "10b",
   "offset_ask": "-10b",
@@ -53,7 +53,7 @@
     "takeProfitTrailingStop": "5b"
   },
   "metadata": {
-    "generated_at": "2025-06-04_11_18_03",
+    "generated_at": "2025-06-04_12_02_49",
     "strategy": "momentum",
     "spread_pct": "2.5"
   }

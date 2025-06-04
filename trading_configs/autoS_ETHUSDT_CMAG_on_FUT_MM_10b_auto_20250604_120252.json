@@ -3,8 +3,8 @@
   "theo_type": "FAST",
   "trade_strategy": "MM",
   "hedge_strategy": "HLimit",
-  "trade_account": "binfut_10",
-  "hedge_account": "bin_10",
+  "trade_account": "bin_s10",
+  "hedge_account": "bin_h10",
   "trade_times": "0",
   "offset_bid": "-100b",
   "offset_ask": "100b",
@@ -12,12 +12,12 @@
   "ask_qty": "100u",
   "auto_hedge": "Yes",
   "theo_config": {
-    "comments": "autoGen Spread-ETHUSDT-FUT on CMAG- 0",
-    "configName": "autoS-ETHUSDT-FUT on CMAG",
+    "comments": "autoGen Spread-ETHUSDT-CMAG on FUT- 0",
+    "configName": "autoS-ETHUSDT-CMAG on FUT",
     "checkTickersFrequency": 30000,
     "underlyingAssets": {
       "assetSymbol": "ETHUSDT",
-      "assetExchange": "BIN_CMAG",
+      "assetExchange": "BIN_FUT",
       "currencySymbol": "",
       "currencyExchange": "",
       "hedgeAsset": "yes",
@@ -27,7 +27,7 @@
     },
     "tradeAsset": {
       "assetSymbol": "ETHUSDT",
-      "assetExchange": "BIN_FUT",
+      "assetExchange": "BIN_CMAG",
       "minSizeOrder": "6u",
       "currencyType": "Divide"
     }
@@ -50,8 +50,8 @@
     "delayHedgeTime": 2000
   },
   "metadata": {
-    "generated_at": "2025-06-04_11_18_03",
-    "strategy": "spread_trade_futures",
+    "generated_at": "2025-06-04_12_02_49",
+    "strategy": "spread_trade_spot",
     "spread_pct": "1.2"
   }
 }

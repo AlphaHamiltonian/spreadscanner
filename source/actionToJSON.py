@@ -18,7 +18,7 @@ class ConfigGenerator:
         
         # Account and platform mappings
         self.accounts = {
-            'binance': {'spot': 'bin_10', 'futures': 'binfut_10'},
+            'binance': {'spot': 'bin_s10', 'futures': 'bin_h10'},
             'bybit': {'spot': 'bybit_spot_01', 'futures': 'bybit_01'},
             'okx': {'spot': 'okx_spot_01', 'futures': 'okx_01'}
         }
