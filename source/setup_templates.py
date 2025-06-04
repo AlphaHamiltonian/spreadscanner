@@ -4,6 +4,7 @@
 import json
 from pathlib import Path
 import sys
+from datetime import datetime
 
 def create_templates(overwrite=False):
     """Create all template files and strategy config"""
@@ -13,7 +14,9 @@ def create_templates(overwrite=False):
     # Create subdirectories
     for subdir in ["hedge_strategies", "trade_strategies", "theo_configs"]:
         (base_dir / subdir).mkdir(exist_ok=True)
-    
+
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H_%M_%S')    
+
     # Template definitions
     templates = {
         "base.json": {
@@ -33,7 +36,7 @@ def create_templates(overwrite=False):
             "trade_config": "@trade_strategies/{trade_config_file}",
             "hedge_config": "@hedge_strategies/{hedge_config_file}",
             "metadata": {
-                "generated_at": "{timestamp}",
+                "generated_at": timestamp,
                 "strategy": "{strategy_type}",
                 "spread_pct": "{spread_pct}"
             }
