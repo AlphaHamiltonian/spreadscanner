@@ -24,6 +24,9 @@ class TradingSignalServer:
         self.is_running = False
         self.message_queue = asyncio.Queue()
         
+        # Pending messages queue for when no clients are connected
+        self.pending_messages = []
+        self.pending_messages_lock = threading.Lock()        
         # SSL Configuration
         self.ssl_context = None
         if use_ssl:
@@ -115,7 +118,25 @@ class TradingSignalServer:
         if self.last_signal:
             await websocket.send(json.dumps(self.last_signal))
             logger.info(f"Sent last signal to new client: {client_info}")
-        
+
+        # Schedule sending pending messages after 5 seconds
+        async def send_pending_after_delay():
+            await asyncio.sleep(5.0)
+            
+            # Get and clear pending messages
+            with self.pending_messages_lock:
+                messages_to_send = self.pending_messages.copy()
+                self.pending_messages.clear()
+                
+            if messages_to_send:
+                logger.info(f"Sending {len(messages_to_send)} pending messages to clients")
+                for message in messages_to_send:
+                    await self.message_queue.put(message)
+                    
+        # Start the delayed send task
+        asyncio.create_task(send_pending_after_delay())        
+
+
     async def unregister_client(self, websocket: websockets.WebSocketServerProtocol):
         """Remove a client connection"""
         if websocket in self.clients:
@@ -293,7 +314,7 @@ class TradingSignalServer:
         await asyncio.Future()  # Run forever
         
     def queue_trading_signal(self, source1: str, source2: str, exchange1: str, exchange2: str, 
-                           spread_pct: float, config1: Dict):#, config2: Dict):
+                           spread_pct: float, config1: Dict):
         """Queue a trading signal to be broadcast"""
         if not self.is_running:
             logger.warning("WebSocket server not running, cannot queue trading signal")
@@ -311,7 +332,6 @@ class TradingSignalServer:
             "spread_pct": spread_pct,
             "configs": {
                 "config1": config1,
-            #    "config2": config2
             }
         }
         
@@ -319,7 +339,14 @@ class TradingSignalServer:
             'type': 'trading_signal',
             'data': signal_data
         }
-        
+
+        # If no clients connected, add to pending messages
+        if not self.clients:
+            with self.pending_messages_lock:
+                self.pending_messages.append(message)
+            logger.info(f"No clients connected, queued trading signal for later: {source1} vs {source2}")
+            return True
+
         try:
             # Queue the message for async processing
             future = asyncio.run_coroutine_threadsafe(
@@ -348,17 +375,25 @@ class TradingSignalServer:
             "message": message,
             "spread_data": spread_data if spread_data else {}
         }
-        
         message_obj = {
             'type': 'alert',
             'data': alert_data
         }
-        
+
+        # If no clients connected, add to pending messages
+        if not self.clients:
+            with self.pending_messages_lock:
+                self.pending_messages.append(message_obj)
+            logger.info(f"No clients connected, queued alert for later: {message}")
+            return True
+
         try:
             future = asyncio.run_coroutine_threadsafe(
                 self.message_queue.put(message_obj),
                 self.loop
             )
+
+
             future.result(timeout=1.0)
             logger.info(f"Alert queued successfully: {message}")
             return True

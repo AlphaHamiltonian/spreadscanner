@@ -88,7 +88,7 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct):
             'ask_qty': '200u'
         }
         
-        config1, config2 = generate_spread_configs_direct(
+        config1 = generate_spread_configs_direct(
             source1, source2, exchange1, exchange2, spread_pct, 
             strategy='MM',
             custom=custom_params
@@ -96,7 +96,6 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct):
         
         # 2. Prepare common data
         config1_name = config1.get('theo_config', {}).get('configName', 'Config1')
-        config2_name = config2.get('theo_config', {}).get('configName', 'Config2')
         
         # 3. Track success for each method
         telegram_success = False
@@ -112,7 +111,7 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct):
                         f"📊 Trading Signal Generated\n"
                         f"Pair: {source1} vs {source2}\n"
                         f"Spread: {spread_pct:.2f}%\n"
-                        f"Configs: {config1_name}, {config2_name}\n"
+                        f"Configs: {config1_name}\n"
                         f"Full details sent via WebSocket"
                     )
                 else:
@@ -121,7 +120,6 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct):
                         f"Trading configs generated for {source1} vs {source2} "
                         f"(spread: {spread_pct:.2f}%)\n\n"
                         f"Config 1:\n```json\n{json.dumps(config1, indent=2)}\n```\n\n"
-                        f"Config 2:\n```json\n{json.dumps(config2, indent=2)}\n```"
                     )
                 
                 telegram_success = send_telegram_message(message)
@@ -131,7 +129,7 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct):
         # 5. Handle WebSocket
         if BROADCAST_METHOD in ["websocket", "both"]:
             trading_signal_server.queue_trading_signal(
-                source1, source2, exchange1, exchange2, spread_pct, config1#, config2
+                source1, source2, exchange1, exchange2, spread_pct, config1
             )
             print("Trade signal queued for WebSocket broadcast")
             websocket_success = True

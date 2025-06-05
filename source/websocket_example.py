@@ -34,8 +34,6 @@ class TradingSignalClient:
         # Log config details
         logger.info("\nConfig 1:")
         logger.info(json.dumps(data['configs']['config1'], indent=2))
-        logger.info("\nConfig 2:")
-        logger.info(json.dumps(data['configs']['config2'], indent=2))
         logger.info("=" * 60)
         
         # Here you would add your own logic to handle the trading signal

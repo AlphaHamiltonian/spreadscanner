@@ -166,24 +166,9 @@ class ConfigGenerator:
             'strategy_type': 'spread_trade_spot'
         })
         
-        # Config 2: Trade FUTURES, Hedge SPOT
-        config2 = self.fill_template(base, {
-            **common,
-            'id': (int(time.time() * 1000) + 1) % 100000,
-            'trade_account': self.accounts[fut_ex]['futures'],
-            'hedge_account': self.accounts[spot_ex]['spot'],
-            'theo_comment': f"Trade {fut_sym} hedge {spot_sym}",
-            'asset_symbol': self.format_symbol(spot_sym, spot_ex),
-            'asset_exchange': self.platforms[spot_ex]['spot'],
-            'asset_exchange_short': get_short_name(self.platforms[spot_ex]['spot']),
-            'trade_symbol': self.format_symbol(fut_sym, fut_ex),
-            'trade_exchange': self.platforms[fut_ex]['futures'],
-            'trade_exchange_short': get_short_name(self.platforms[fut_ex]['futures']),
-            'strategy_type': 'spread_trade_futures'
-        })
         
         self.counter += 1
-        return config1, config2
+        return config1
 
 
     def save_config(self, config: Dict, suffix: str = "") -> Path:
@@ -254,10 +239,10 @@ def create_spread_configs(source1: str, source2: str, exchange1: str, exchange2:
                          custom: Dict = None, profile: str = None) -> Tuple[Path, Path]:
     """Create spread configs with optional custom parameters or profile"""
     gen = ConfigGenerator()
-    config1, config2 = gen.generate_spread_configs(
+    config1 = gen.generate_spread_configs(
         source1, source2, exchange1, exchange2, spread_pct, strategy, custom, profile
     )
-    return gen.save_config(config1, "_SPOT"), gen.save_config(config2, "_FUT")
+    return gen.save_config(config1, "_SPOT")
 
 def create_momentum_config(source: str, exchange: str, momentum_pct: float = None,
                           strategy: str = 'SC', custom: Dict = None, profile: str = None) -> Path:
@@ -271,11 +256,11 @@ def generate_spread_configs_direct(source1: str, source2: str, exchange1: str, e
                                  custom: Dict = None, profile: str = None) -> Tuple[Dict, Dict]:
     """Generate spread configs and return them directly without saving to disk"""
     gen = ConfigGenerator()
-    config1, config2 = gen.generate_spread_configs(
+    config1 = gen.generate_spread_configs(
         source1, source2, exchange1, exchange2, spread_pct, strategy, custom, profile
     )
     # Return the actual config dictionaries, not file paths
-    return config1, config2
+    return config1
 
 # Testing
 if __name__ == "__main__":
