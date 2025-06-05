@@ -270,11 +270,11 @@ if __name__ == "__main__":
     print("=== Testing Config Generation ===\n")
     
     # 1. MM with custom parameters
-    p1, p2 = create_spread_configs(
+    p1 = create_spread_configs(
         "binance:ETHUSDT", "binance:ETHUSDT_SPOT", "binance", "binance", 1.2,
         strategy='MM'
     )
-    print(f"✓ MM Custom: {p1.name}, {p2.name}")
+    print(f"✓ MM Custom: {p1.name}")
     
     # 3. Using profile (if strategy_config.json exists)
 
