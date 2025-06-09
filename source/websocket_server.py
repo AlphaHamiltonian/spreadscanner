@@ -117,7 +117,7 @@ class TradingSignalServer:
         # Send last signal if available (for clients that connect after a signal was sent)
         if self.last_signal:
             async def send_last_signal_after_delay():
-                await asyncio.sleep(5.0)  # 5 second delay
+                await asyncio.sleep(10.0)  # 5 second delay
                 try:
                     await websocket.send(json.dumps(self.last_signal))
                     logger.info(f"Sent last signal to new client: {client_info}")
@@ -129,7 +129,7 @@ class TradingSignalServer:
 
         # Schedule sending pending messages after 5 seconds
         async def send_pending_after_delay():
-            await asyncio.sleep(5.0)
+            await asyncio.sleep(10.0)
             
             # Get and clear pending messages
             with self.pending_messages_lock:
@@ -284,7 +284,7 @@ class TradingSignalServer:
                     await self.broadcast_signal(message['data'])
                 elif message['type'] == 'alert':
                     await self.send_alert(message['data'])
-                await asyncio.sleep(0.1)  # 100ms delay                   
+                await asyncio.sleep(0.2)  # 100ms delay                   
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
