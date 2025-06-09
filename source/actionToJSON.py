@@ -114,13 +114,8 @@ class ConfigGenerator:
         _, symbol1 = source1.split(':', 1)
         _, symbol2 = source2.split(':', 1)
         
-        # Determine spot vs futures
-        if '_SPOT' in symbol1:
-            spot_sym, spot_ex = symbol1, exchange1
-            fut_sym, fut_ex = symbol2, exchange2
-        else:
-            spot_sym, spot_ex = symbol2, exchange2
-            fut_sym, fut_ex = symbol1, exchange1
+        trade_sym, trade_ex = symbol1, exchange1
+        hedge_sym, hedge_ex = symbol2, exchange2
         
         # Get parameters and base values
         params = self.get_params('spread', strategy, custom, profile)
@@ -149,23 +144,22 @@ class ConfigGenerator:
             'counter': self.counter,
             **params  # Include offset/qty parameters
         }
-        
-        # Config 1: Trade SPOT, Hedge FUTURES
+        # Config 1: First symbol is trade, second is hedge
         config1 = self.fill_template(base, {
             **common,
             'id': int(time.time() * 1000) % 100000,
-            'trade_account': self.accounts[spot_ex]['spot'],
-            'hedge_account': self.accounts[fut_ex]['futures'],
-            'theo_comment': f"Trade {spot_sym} hedge {fut_sym}",
-            'asset_symbol': self.format_symbol(fut_sym, fut_ex),
-            'asset_exchange': self.platforms[fut_ex]['futures'],
-            'asset_exchange_short': get_short_name(self.platforms[fut_ex]['futures']),
-            'trade_symbol': self.format_symbol(spot_sym, spot_ex),
-            'trade_exchange': self.platforms[spot_ex]['spot'],
-            'trade_exchange_short': get_short_name(self.platforms[spot_ex]['spot']),
-            'strategy_type': 'spread_trade_spot'
+            'trade_account': self.accounts[trade_ex]['spot' if '_SPOT' in trade_sym else 'futures'],
+            'hedge_account': self.accounts[hedge_ex]['spot' if '_SPOT' in hedge_sym else 'futures'],
+            'theo_comment': f"Trade {trade_sym} hedge {hedge_sym}",
+            'asset_symbol': self.format_symbol(hedge_sym, hedge_ex),
+            'asset_exchange': self.platforms[hedge_ex]['spot' if '_SPOT' in hedge_sym else 'futures'],
+            'asset_exchange_short': get_short_name(self.platforms[hedge_ex]['spot' if '_SPOT' in hedge_sym else 'futures']),
+            'trade_symbol': self.format_symbol(trade_sym, trade_ex),
+            'trade_exchange': self.platforms[trade_ex]['spot' if '_SPOT' in trade_sym else 'futures'],
+            'trade_exchange_short': get_short_name(self.platforms[trade_ex]['spot' if '_SPOT' in trade_sym else 'futures']),
+            'strategy_type': 'spread_trade'
         })
-        
+
         
         self.counter += 1
         return config1
