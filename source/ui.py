@@ -743,6 +743,8 @@ class ExchangeMonitorApp:
     # In ExchangeMonitorApp.update_data_table
     def update_data_table(self, force_upper=False, force_lower=False):
         # Implement debouncing to prevent too frequent updates
+        if not self.root.winfo_viewable():
+            return        
         current_time = time.time()
         # Increase the minimum update interval from 1.0s to 1.5s for smoother UI
         if not (force_upper or force_lower) and hasattr(self, 'last_update_time') and current_time - self.last_update_time < 1.5:

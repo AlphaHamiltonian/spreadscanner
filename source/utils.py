@@ -562,7 +562,14 @@ class DataStore:
             # Add equivalent symbols from other exchanges
             for other in ['binance', 'bybit', 'okx']:
                 if other != exchange:
-                    equiv = symbol_matcher.find_equivalent_symbol(exchange, symbol, other)
+                    #equiv = symbol_matcher.find_equivalent_symbol(exchange, symbol, other)
+                    cache_key = (exchange, symbol, other)
+                    if cache_key in self.symbol_equivalence_map:
+                        equiv = self.symbol_equivalence_map[cache_key]
+                    else:
+                        equiv = symbol_matcher.find_equivalent_symbol(exchange, symbol, other)
+                        self.symbol_equivalence_map[cache_key] = equiv
+
                     if equiv:
                         if other not in required_symbols:
                             required_symbols[other] = set()
@@ -622,7 +629,14 @@ class DataStore:
                 if other == exchange:
                     continue
                 
-                equiv = symbol_matcher.find_equivalent_symbol(exchange, dirty_symbol, other)
+                #equiv = symbol_matcher.find_equivalent_symbol(exchange, dirty_symbol, other)
+                cache_key = (exchange, dirty_symbol, other)
+                if cache_key in self.symbol_equivalence_map:
+                    equiv = self.symbol_equivalence_map[cache_key]
+                else:
+                    equiv = symbol_matcher.find_equivalent_symbol(exchange, dirty_symbol, other)
+                    self.symbol_equivalence_map[cache_key] = equiv
+
                 if not equiv:
                     continue
                 
@@ -647,6 +661,9 @@ class DataStore:
             }
 
         self.spread_timestamp = current_time
+
+
+
     def _calculate_spread(self, price1, price2, exchange1=None, symbol1=None, exchange2=None, symbol2=None):
         """Calculate spread with different staleness thresholds for futures vs spot"""
         # Basic validation
