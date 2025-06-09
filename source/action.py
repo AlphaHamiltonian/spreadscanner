@@ -103,9 +103,8 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct, custom_params
                 if BROADCAST_METHOD == "both":
                     # Short notification when using both methods
                     message = (
-                        f"📊 Trading Signal Generated\n"
-                        f"Pair: {source1} vs {source2}\n"
-                        f"Spread: {spread_pct:.2f}%\n"
+                        f"Trading configs generated for {source1} vs {source2} "
+                        f"(spread: {spread_pct:.2f}%)\n\n"
                         f"Configs: {config1_name}\n"
                         f"Full details sent via WebSocket"
                     )
