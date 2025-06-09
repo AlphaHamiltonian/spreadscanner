@@ -150,7 +150,7 @@ class ConfigGenerator:
             'id': int(time.time() * 1000) % 100000,
             'trade_account': self.accounts[trade_ex]['spot' if '_SPOT' in trade_sym else 'futures'],
             'hedge_account': self.accounts[hedge_ex]['spot' if '_SPOT' in hedge_sym else 'futures'],
-            'theo_comment': f"Trade {trade_sym} hedge {hedge_sym}",
+            'theo_comment': f"Trade {trade_sym} ({trade_ex}) hedge {hedge_sym} ({hedge_ex})",
             'asset_symbol': self.format_symbol(hedge_sym, hedge_ex),
             'asset_exchange': self.platforms[hedge_ex]['spot' if '_SPOT' in hedge_sym else 'futures'],
             'asset_exchange_short': get_short_name(self.platforms[hedge_ex]['spot' if '_SPOT' in hedge_sym else 'futures']),
