@@ -52,15 +52,15 @@ class AlertManager:
                     if current_time - last_trade_time > 86400:
                         #SPOT on FUTURE
                         custom_params_SoF = {
-                            'bid_qty': '10u',
-                            'ask_qty': '0',
+                            'bid_qty': '0',
+                            'ask_qty': '10u',
                             'offset_bid': '-50b',
                             'offset_ask': '50b'
                         }
                         #FUTURE on Spot
                         custom_params_FoS = {
-                            'bid_qty': '0',
-                            'ask_qty': '10u',
+                            'bid_qty': '10u',
+                            'ask_qty': '0',
                             'offset_bid': '-50b',
                             'offset_ask': '50b'
                         }                        
