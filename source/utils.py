@@ -347,15 +347,15 @@ class WebSocketManager:
                 return
                 
             # Skip sending application-level pings for Binance
-            if "binance" in self.name.lower():
+            if "binance" in self.name.lower() or "okx" in self.name.lower():
                 return
                 
             # For other exchanges
             try:
                 if "bybit" in self.name.lower():
                     self.ws.send(json.dumps({"op": "ping"}))
-                elif "okx" in self.name.lower():
-                    self.ws.send(json.dumps({"event": "ping"}))
+                #elif "okx" in self.name.lower():
+                #    self.ws.send(json.dumps({"event": "ping"}))
                 logger.debug(f"Sent heartbeat to {self.name}")
             except websocket._exceptions.WebSocketConnectionClosedException:
                 logger.warning(f"{self.name} connection closed, cannot send heartbeat")
