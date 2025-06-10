@@ -1110,7 +1110,7 @@ class ExchangeMonitorApp:
         # Update the data tables periodically
         def update_tables():
             self.update_data_table()
-            self.root.after(500, update_tables)  # Update every 500ms
+            self.root.after(750, update_tables)  # Update every 750ms
         
         # Schedule initial mirror sorting AFTER the first data update
         def initial_mirror_sort():

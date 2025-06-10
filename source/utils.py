@@ -537,7 +537,7 @@ class DataStore:
         """Calculate spreads only for symbols that have been updated"""
         current_time = time.time()
         # Add this early exit
-        if current_time - self.spread_timestamp < 0.2:  # Skip if calculated < 200ms ago
+        if current_time - self.spread_timestamp < 0.5:  # Skip if calculated < 500ms ago
             return
         # Get dirty symbols and clear the set
         with self.dirty_symbols_lock:
