@@ -111,7 +111,7 @@ class OkxConnector(BaseExchangeConnector):
         """Connect to OKX WebSocket with optimized connection management"""
         self.fetch_symbols()
         symbols_list = data_store.get_symbols('okx')
-        
+        symbols_list = self.app.get_filtered_symbols(symbols_list) if hasattr(self.app, 'get_filtered_symbols') else symbols_list
         if not symbols_list:
             logger.error("No OKX symbols found")
             return
@@ -438,6 +438,9 @@ class OkxConnector(BaseExchangeConnector):
                     base, quote = parts[0], parts[1]
                     spot_symbol = f"{base}-{quote}"
                     spot_to_future_map[spot_symbol] = future_symbol
+        
+        # Store reference to self for use in nested functions
+        connector_self = self
                     
         # OKX WebSocket for spot data
         ws_url = "wss://ws.okx.com/ws/v5/public"
@@ -472,8 +475,8 @@ class OkxConnector(BaseExchangeConnector):
                                 raw_ask = float(book_data['asks'][0][0])
                                 
                                 # Validate and potentially correct the prices
-                                best_bid = self.validate_price(raw_bid, spot_key, 'bid', previous_prices)
-                                best_ask = self.validate_price(raw_ask, spot_key, 'ask', previous_prices)
+                                best_bid = connector_self.validate_price(raw_bid, spot_key, 'bid', previous_prices)
+                                best_ask = connector_self.validate_price(raw_ask, spot_key, 'ask', previous_prices)
                                 
                                 bid_qty = float(book_data['bids'][0][1])
                                 ask_qty = float(book_data['asks'][0][1])
@@ -488,24 +491,18 @@ class OkxConnector(BaseExchangeConnector):
         def on_open(ws):
             logger.info("OKX spot WebSocket connected")
             
-            # Subscribe to spot orderbooks for major pairs
-            # Get just the top 20 spot symbols from our mapping
-            major_pairs = list(spot_to_future_map.keys())[:20]
-            args = []
+            # Get ALL spot symbols (remove [:20] limit)
+            spot_symbols = list(spot_to_future_map.keys())
             
-            for symbol in major_pairs:
-                args.append({
-                    "channel": "books",
-                    "instId": symbol
-                })
-                
-            subscribe_msg = json.dumps({
-                "op": "subscribe",
-                "args": args
-            })
+            # Apply filter if enabled
+            if hasattr(connector_self.app, 'get_filtered_symbols'):
+                filtered_futures = connector_self.app.get_filtered_symbols(list(futures_symbols))
+                # Only keep spot symbols that map to filtered futures
+                spot_symbols = [s for s in spot_symbols if spot_to_future_map[s] in filtered_futures]
+                logger.info(f"Filtered OKX spot symbols: {len(spot_symbols)}")
             
-            logger.info(f"Sending OKX spot subscription for {len(major_pairs)} symbols")
-            ws.send(subscribe_msg)
+            # Use batch subscription instead of sending all at once
+            connector_self._batch_subscribe_okx_spot_symbols(ws, spot_symbols)
 
         def on_error(ws, error):
             logger.error(f"OKX spot WebSocket error: {error}")
@@ -514,7 +511,7 @@ class OkxConnector(BaseExchangeConnector):
             logger.warning(f"OKX spot WebSocket closed: {close_status_code} - {close_msg}")
             # Use safe reconnection
             if not stop_event.is_set():
-                self._safe_reconnect("spot")
+                connector_self._safe_reconnect("spot")
             
         manager = WebSocketManager(
             url=ws_url,
@@ -529,7 +526,48 @@ class OkxConnector(BaseExchangeConnector):
         
         self.websocket_managers["okx_spot_ws"] = manager
         manager.connect()
-
+    def _batch_subscribe_okx_spot_symbols(self, ws, symbols):
+        """Subscribe to OKX spot symbols in batches"""
+        if not symbols:
+            logger.warning("No OKX spot symbols to subscribe")
+            return
+            
+        batch_size = 20
+        total_batches = (len(symbols) + batch_size - 1) // batch_size
+        
+        def send_batch(batch_idx):
+            if batch_idx >= total_batches:
+                logger.info(f"Completed all {total_batches} OKX spot subscription batches")
+                return
+                
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, len(symbols))
+            batch = symbols[start_idx:end_idx]
+            
+            args = []
+            for symbol in batch:
+                args.append({
+                    "channel": "books",
+                    "instId": symbol
+                })
+                
+            subscribe_msg = json.dumps({
+                "op": "subscribe",
+                "args": args
+            })
+            
+            try:
+                logger.info(f"Sending OKX spot subscription batch {batch_idx+1}/{total_batches} ({len(batch)} symbols)")
+                ws.send(subscribe_msg)
+            except Exception as e:
+                logger.error(f"Error sending OKX spot subscription batch: {e}")
+                return
+            
+            # Schedule next batch
+            if batch_idx + 1 < total_batches:
+                threading.Timer(1.0, send_batch, [batch_idx + 1]).start()
+                
+        send_batch(0)
     def fetch_symbols(self):
         """Fetch all tradable symbols from OKX (futures and spot)"""
         try:

@@ -203,7 +203,17 @@ class BybitConnector(BaseExchangeConnector):
             
         # Get all spot symbols
         spot_symbols = list(data_store.bybit_spot_to_future_map.keys())
+        # ADD THESE LINES: Filter based on futures symbols
+        if hasattr(self.app, 'get_filtered_symbols'):
+            # Get filtered futures symbols
+            filtered_futures = self.app.get_filtered_symbols(list(data_store.get_symbols('bybit')))
+            # Only keep spot symbols that map to filtered futures
+            spot_symbols = [s for s in spot_symbols if data_store.bybit_spot_to_future_map.get(s) in filtered_futures]
+            logger.info(f"Filtered Bybit spot symbols: {len(spot_symbols)}")
+
         logger.info(f"Preparing to subscribe to {len(spot_symbols)} Bybit spot symbols using orderbook stream")
+
+
         
         # Bybit V5 WebSocket for spot
         ws_url = "wss://stream.bybit.com/v5/public/spot"
@@ -542,6 +552,7 @@ class BybitConnector(BaseExchangeConnector):
                 self.fetch_symbols()
                 
             symbols_list = list(data_store.get_symbols('bybit'))
+            symbols_list = self.app.get_filtered_symbols(symbols_list) if hasattr(self.app, 'get_filtered_symbols') else symbols_list
             if not symbols_list:
                 logger.error("No Bybit symbols found")
                 return

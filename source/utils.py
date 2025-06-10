@@ -536,7 +536,9 @@ class DataStore:
     def calculate_all_spreads(self):
         """Calculate spreads only for symbols that have been updated"""
         current_time = time.time()
-
+        # Add this early exit
+        if current_time - self.spread_timestamp < 0.2:  # Skip if calculated < 200ms ago
+            return
         # Get dirty symbols and clear the set
         with self.dirty_symbols_lock:
             if not self.dirty_symbols:
@@ -699,7 +701,7 @@ class DataStore:
         # Check if data is stale (using appropriate thresholds)
         if price1_age > max_age1 or price2_age > max_age2 or abs(price1_age-price2_age)> Config.DIFFERENCE_THRESHOLD:
             # Log with threshold info (reduce volume with sampling)
-            if random.random() < 0.0001:  # Log only 5% of occurrences
+            if random.random() < 0.00001:  # Log less of occurrences
                 logger.warning(f"Stale data: {source1}({price1_age:.2f}s/{max_age1}s) vs "
                             f"{source2}({price2_age:.2f}s/{max_age2}s)")
             return 'N/A'

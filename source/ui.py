@@ -122,6 +122,29 @@ class ExchangeMonitorApp:
         # Initialize mirror sort setting
         self.mirror_sort_var = tk.BooleanVar(value=True)
 
+    def on_filter_data_toggle(self):
+        """Handle filter data collection toggle"""
+        filter_text = self.filter_var.get()
+        is_enabled = self.filter_data_var.get()
+        
+        logger.info(f"Filter Data Toggle: {'ON' if is_enabled else 'OFF'}, Filter: '{filter_text}'")
+        
+        if is_enabled and not filter_text:
+            messagebox.showwarning("No Filter", "Please enter a filter first")
+            self.filter_data_var.set(False)
+            return
+            
+        self.restart_exchange_threads()
+
+    def get_filtered_symbols(self, all_symbols):
+        """Return filtered symbols if filter mode is active"""
+        if self.filter_data_var.get() and self.filter_var.get():
+            filter_text = self.filter_var.get().upper()
+            filtered = [s for s in all_symbols if filter_text in s]
+            logger.info(f"Filtering symbols: {len(all_symbols)} -> {len(filtered)} (filter: '{filter_text}')")
+            return filtered
+        return all_symbols
+    
     def create_control_panel(self):
         """Create the control panel with configuration options"""
         control_frame = ttk.LabelFrame(self.main_frame, text="Controls", padding="10")
@@ -162,21 +185,14 @@ class ExchangeMonitorApp:
         filter_entry = ttk.Entry(control_frame, textvariable=self.filter_var, width=15)
         filter_entry.grid(row=0, column=11, padx=5, pady=5, sticky=tk.W)
         self.filter_var.trace("w", lambda *args: self.apply_filter())
+        self.filter_data_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            control_frame, 
+            text="Filter Data", 
+            variable=self.filter_data_var, 
+            command=self.on_filter_data_toggle
+        ).grid(row=0, column=12, padx=5, pady=5)
 
-        # Mirror sort checkbox
-        # self.mirror_sort_var = tk.BooleanVar(value=True)
-        # mirror_sort_chk = ttk.Checkbutton(
-        #     control_frame,
-        #     text="Mirror Sort Tables",
-        #     variable=self.mirror_sort_var
-        # )
-        # mirror_sort_chk.grid(row=0, column=4, padx=15, pady=5, sticky=tk.W)
-
-        # Add tooltip to mirror sort checkbox
-        # ToolTip(mirror_sort_chk, "When enabled, sorting one table will automatically\n"
-        #                     "sort the other table in the opposite direction,\n"
-        #                     "showing both ends of the data range at once.")
-    # Add this after the existing controls
         ttk.Label(control_frame, text="Max Rows:").grid(row=0, column=12, padx=5, pady=5, sticky=tk.W)
         self.max_rows_var = tk.StringVar(value="20")
         max_rows_combo = ttk.Combobox(
