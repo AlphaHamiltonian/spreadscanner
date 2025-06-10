@@ -111,7 +111,6 @@ class OkxConnector(BaseExchangeConnector):
         """Connect to OKX WebSocket with optimized connection management"""
         self.fetch_symbols()
         symbols_list = data_store.get_symbols('okx')
-        symbols_list = self.app.get_filtered_symbols(symbols_list) if hasattr(self.app, 'get_filtered_symbols') else symbols_list
         if not symbols_list:
             logger.error("No OKX symbols found")
             return
@@ -493,13 +492,6 @@ class OkxConnector(BaseExchangeConnector):
             
             # Get ALL spot symbols (remove [:20] limit)
             spot_symbols = list(spot_to_future_map.keys())
-            
-            # Apply filter if enabled
-            if hasattr(connector_self.app, 'get_filtered_symbols'):
-                filtered_futures = connector_self.app.get_filtered_symbols(list(futures_symbols))
-                # Only keep spot symbols that map to filtered futures
-                spot_symbols = [s for s in spot_symbols if spot_to_future_map[s] in filtered_futures]
-                logger.info(f"Filtered OKX spot symbols: {len(spot_symbols)}")
             
             # Use batch subscription instead of sending all at once
             connector_self._batch_subscribe_okx_spot_symbols(ws, spot_symbols)

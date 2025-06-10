@@ -27,6 +27,10 @@ class SymbolMatcher:
         Normalize symbols for cross-exchange comparison.
         Returns a standardized format that can be compared across exchanges.
         """
+
+        if exchange == 'binance' and '-' not in symbol and '_' not in symbol:
+            return symbol  # Skip all processing!
+        
         cache_key = f"{exchange}:{symbol}"
         
         if cache_key in self._normalized_cache:
@@ -34,7 +38,7 @@ class SymbolMatcher:
             
         # Normalization rules per exchange
         normalized = symbol
-        
+
         if exchange == 'okx':
             # OKX: BTC-USDT-SWAP -> BTCUSDT
             if '-SWAP' in symbol:

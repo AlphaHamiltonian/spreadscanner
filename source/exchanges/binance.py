@@ -241,8 +241,7 @@ class BinanceConnector(BaseExchangeConnector):
 
     def connect_futures_websocket(self):
         """Connect to Binance Futures WebSocket with improved ping/pong handling"""
-        symbols = list(data_store.get_symbols('binance'))
-        symbols = self.app.get_filtered_symbols(symbols) if hasattr(self.app, 'get_filtered_symbols') else symbols        
+        symbols = list(data_store.get_symbols('binance'))   
         # Split symbols into batches of 200 (Binance limit)
         symbol_batches = [symbols[i:i + 200] for i in range(0, len(symbols), 200)]
         
@@ -285,7 +284,6 @@ class BinanceConnector(BaseExchangeConnector):
         """Connect to Binance spot WebSocket with improved reliability"""
         # Get futures symbols to create spot subscriptions
         futures_symbols = list(data_store.get_symbols('binance'))
-        futures_symbols = self.app.get_filtered_symbols(futures_symbols) if hasattr(self.app, 'get_filtered_symbols') else futures_symbols
         # Create batches of symbols (Binance allows up to 1024 streams per connection)
         # But for stability, use smaller batches of 200 like futures
         batch_size = 200
