@@ -533,6 +533,7 @@ class DataStore:
             for write_lock in reversed(acquired_locks):
                 write_lock.__exit__(None, None, None)
 
+
     def calculate_all_spreads(self):
         """Calculate spreads only for symbols that have been updated"""
         current_time = time.time()
@@ -564,14 +565,7 @@ class DataStore:
             # Add equivalent symbols from other exchanges
             for other in ['binance', 'bybit', 'okx']:
                 if other != exchange:
-                    #equiv = symbol_matcher.find_equivalent_symbol(exchange, symbol, other)
-                    cache_key = (exchange, symbol, other)
-                    if cache_key in self.symbol_equivalence_map:
-                        equiv = self.symbol_equivalence_map[cache_key]
-                    else:
-                        equiv = symbol_matcher.find_equivalent_symbol(exchange, symbol, other)
-                        self.symbol_equivalence_map[cache_key] = equiv
-
+                    equiv = symbol_matcher.find_equivalent_symbol(exchange, symbol, other)
                     if equiv:
                         if other not in required_symbols:
                             required_symbols[other] = set()
