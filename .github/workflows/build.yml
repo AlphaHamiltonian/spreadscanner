@@ -56,12 +56,12 @@ jobs:
 
       - name: Compile with Nuitka (Windows)
         if: matrix.platform == 'Windows'
-        run: python -m nuitka --onefile --enable-plugin=tk-inter --disable-ccache --jobs=1 --assume-yes-for-downloads run.py
+        run: python -m nuitka --onefile --enable-plugin=tk-inter --disable-ccache --jobs=1 --assume-yes-for-downloads  --include-package=websocket --windows-disable-console --windows-company-name="alphaH" --windows-product-name="Exchange Monitor" --windows-file-version="1.0.0.0" --windows-product-version="1.0.0.0" --windows-file-description="Cryptocurrency Exchange Monitor" run.py
         shell: pwsh
         
       - name: Compile with Nuitka (Linux / macOS)
         if: matrix.platform != 'Windows'
-        run: python -m nuitka --onefile --enable-plugin=tk-inter --jobs=2 run.py
+        run: python -m nuitka --onefile --enable-plugin=tk-inter --jobs=2 --include-package=websocket run.py
         shell: bash
         
       - name: Rename output (Windows)
