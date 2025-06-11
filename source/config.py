@@ -10,13 +10,17 @@ class Config:
     FUTURES_THRESHOLD = 1
     SPOT_THRESHOLD = 1
     DIFFERENCE_THRESHOLD = 1
-    UPPER_LIMIT = 1
-    LOWER_LIMIT = -3
+    UPPER_LIMIT = 0.8
+    LOWER_LIMIT = -2
     DELETE_OLD_TIME = 10
     NUMBER_OF_SEC_THRESHOLD = 3
     NUMBER_OF_SEC_THRESHOLD_TRADE = 3
     FUNDING_RATE_THRESHOLD = 0.9
-    
+    # Movement detection thresholds (headless only)
+    MOVEMENT_DETECTION_ENABLED = True
+    MOVEMENT_THRESHOLD_PCT = 15  # Detect 20% moves
+    MOVEMENT_TIME_WINDOW = 1.0     # Within 1 second
+    MOVEMENT_ALERT_COOLDOWN = 60   # 60 seconds between alerts per symbol    
     # Runtime flags
     TELEGRAM_ENABLED = False
 

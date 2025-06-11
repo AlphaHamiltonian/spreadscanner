@@ -7,6 +7,9 @@ from source.utils import data_store
 from source.exchanges.binance import BinanceConnector
 from source.exchanges.bybit import BybitConnector
 from source.exchanges.okx import OkxConnector
+import source.config as config
+# Add with the other imports in headless.py
+from source.price_movement_detector import initialize_detector, movement_detector
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +29,11 @@ class HeadlessMonitor:
         
         # Start health monitor
         self.start_health_monitor()
-        
+        if config.Config.MOVEMENT_DETECTION_ENABLED:
+            initialize_detector(
+                threshold_pct=config.Config.MOVEMENT_THRESHOLD_PCT,
+                time_window=config.Config.MOVEMENT_TIME_WINDOW
+            )        
         logger.info("Headless monitor initialized")
         
     def start_exchange_threads(self, exchange_name="all"):
