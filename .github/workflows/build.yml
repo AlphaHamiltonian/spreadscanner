@@ -56,12 +56,12 @@ jobs:
 
       - name: Compile with Nuitka (Windows)
         if: matrix.platform == 'Windows'
-        run: python -m nuitka --onefile --enable-plugin=tk-inter --disable-ccache --jobs=1 --assume-yes-for-downloads  --include-package=websocket --windows-disable-console --windows-company-name="alphaH" --windows-product-name="Exchange Monitor" --windows-file-version="1.0.0.0" --windows-product-version="1.0.0.0" --windows-file-description="Cryptocurrency Exchange Monitor" run.py
+        run: python -m nuitka --onefile --enable-plugin=tk-inter --disable-ccache --jobs=1 --assume-yes-for-downloads --follow-imports --include-module=websocket --include-module=websocket._app --include-module=websocket._core --include-module=websocket._exceptions --include-module=websocket._http --include-module=websocket._logging --include-module=websocket._socket --include-module=websocket._ssl_compat --include-module=websocket._url --include-module=websocket._utils --include-module=websocket._abnf --include-package=source --include-data-dir=source/config_templates=source/config_templates --windows-company-name="Open Source" --windows-product-name="Exchange Monitor" --windows-file-version="1.0.0.0" --windows-product-version="1.0.0.0" --windows-file-description="Cryptocurrency Exchange Monitor Tool" run.py
         shell: pwsh
         
       - name: Compile with Nuitka (Linux / macOS)
         if: matrix.platform != 'Windows'
-        run: python -m nuitka --onefile --enable-plugin=tk-inter --jobs=2 --include-package=websocket run.py
+        run: python -m nuitka --onefile --enable-plugin=tk-inter --jobs=2 --follow-imports --include-module=websocket --include-module=websocket._app --include-module=websocket._core --include-module=websocket._exceptions --include-module=websocket._http --include-module=websocket._logging --include-module=websocket._socket --include-module=websocket._ssl_compat --include-module=websocket._url --include-module=websocket._utils --include-module=websocket._abnf --include-package=source --include-data-dir=source/config_templates=source/config_templates run.py
         shell: bash
         
       - name: Rename output (Windows)
