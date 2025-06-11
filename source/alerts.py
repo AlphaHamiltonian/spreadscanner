@@ -87,7 +87,7 @@ class AlertManager:
             key = (exchange, symbol)
             now = time.time()
             
-            if now - self.last_funding_notif_time.get(key, 0) < 3000:
+            if now - self.last_funding_notif_time.get(key, 0) < Config.FUNDING_RATE_COOLDOWN:
                 return
             
             direction = "positive" if r > 0 else "negative"

@@ -18,7 +18,7 @@ class Config:
     FUNDING_RATE_THRESHOLD = 0.9
     # Movement detection thresholds (headless only)
     MOVEMENT_DETECTION_ENABLED = True
-    MOVEMENT_THRESHOLD_PCT = 15  # Detect 20% moves
+    MOVEMENT_THRESHOLD_PCT = 15  # Detect 15% moves
     MOVEMENT_TIME_WINDOW = 1.0     # Within 1 second
     MOVEMENT_ALERT_COOLDOWN = 60   # 60 seconds between alerts per symbol    
     # Runtime flags
