@@ -16,6 +16,7 @@ class Config:
     NUMBER_OF_SEC_THRESHOLD = 3
     NUMBER_OF_SEC_THRESHOLD_TRADE = 3
     FUNDING_RATE_THRESHOLD = 0.9
+    FUNDING_RATE_COOLDOWN= 14400   
     # Movement detection thresholds (headless only)
     MOVEMENT_DETECTION_ENABLED = True
     MOVEMENT_THRESHOLD_PCT = 15  # Detect 15% moves
