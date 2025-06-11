@@ -56,7 +56,7 @@ jobs:
 
       - name: Compile with Nuitka (Windows)
         if: matrix.platform == 'Windows'
-        run: python -m nuitka --onefile --enable-plugin=tk-inter --disable-ccache --jobs=1 --assume-yes-for-downloads  --include-package=websocket --include-package=websockets --windows-company-name="alphaH" --windows-product-name="Exchange Monitor" --windows-file-version="1.0.0.0" --windows-product-version="1.0.0.0" --windows-file-description="Cryptocurrency Exchange Monitor" run.py
+        run: python -m nuitka --onefile --enable-plugin=tk-inter --disable-ccache --jobs=1 --assume-yes-for-downloads  --include-package=websocket --include-package=websockets --windows-company-name="Open Source" --windows-product-name="Exchange Monitor" --windows-file-version="1.0.0.0" --windows-product-version="1.0.0.0" --windows-file-description="Cryptocurrency Exchange Monitor" run.py
         shell: pwsh
         
       - name: Compile with Nuitka (Linux / macOS)
