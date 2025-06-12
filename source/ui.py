@@ -489,50 +489,16 @@ class ExchangeMonitorApp:
         """Apply sorting to the specified data table with faster response"""
         if table_id == "upper":
             logger.info(f"Applying upper sort: {self.upper_sort_column_var.get()} ({self.upper_sort_direction_var.get()})")
-            
-            # Schedule the actual sort in a background thread
-            self.executor.submit(self._background_sort_and_update, table_id)
+            # Force update upper table WITH filter
+            self.update_data_table(force_upper=True, force_lower=False)
         else:
             logger.info(f"Applying lower sort: {self.lower_sort_column_var.get()} ({self.lower_sort_direction_var.get()})")
-            
-            # Schedule the actual sort in a background thread
-            self.executor.submit(self._background_sort_and_update, table_id)
+            # Force update lower table WITHOUT filter
+            self.update_data_table(force_upper=False, force_lower=True)
         
-        # Show immediate visual feedback that something is happening
+        # Show immediate visual feedback
         self.root.config(cursor="watch")
-
-    def _background_sort_and_update(self, table_id):
-        """Background worker for sorting and updating tables"""
-        try:
-            # Get all symbols from all exchanges
-            all_symbols = {}
-            for exchange in ['binance', 'bybit', 'okx']:
-                symbols = data_store.get_symbols(exchange)
-                all_symbols[exchange] = set(symbols)
-            
-            # Prepare table data based on which table we're sorting
-            if table_id == "upper":
-                table_data = self._prepare_table_data(
-                    all_symbols, 
-                    self.upper_sort_column_var.get(),
-                    self.upper_sort_direction_var.get()
-                )
-                
-                # Update UI in main thread
-                self.root.after(0, lambda: self._finalize_ui_update(self.upper_table, table_data, "upper"))
-            else:
-                table_data = self._prepare_table_data(
-                    all_symbols, 
-                    self.lower_sort_column_var.get(),
-                    self.lower_sort_direction_var.get()
-                )
-                
-                # Update UI in main thread
-                self.root.after(0, lambda: self._finalize_ui_update(self.lower_table, table_data, "lower"))
-        except Exception as e:
-            logger.error(f"Error in background sorting: {e}")
-            # Reset cursor in main thread
-            self.root.after(0, lambda: self.root.config(cursor=""))
+        self.root.after(100, lambda: self.root.config(cursor=""))
 
     def _finalize_ui_update(self, table, table_data, table_id):
         """Update UI with the sorted data and reset cursor"""
@@ -545,13 +511,13 @@ class ExchangeMonitorApp:
 
     def apply_filter(self):
         """Apply symbol filter to both data tables"""
-        self.update_data_table(force_upper=True, force_lower=True)
+        self.update_data_table(force_upper=True, force_lower=False)
 
     def manual_refresh(self):
         """Manually refresh data"""
         self.restart_exchange_threads()
         
-    def _prepare_table_data(self, all_symbols, sort_column=None, sort_direction=None):
+    def _prepare_table_data(self, all_symbols, sort_column=None, sort_direction=None, apply_filter=True):
         """Prepare table data in background thread with explicit sort parameters"""
         # If sort parameters weren't provided, use the current values
         if sort_column is None:
@@ -565,7 +531,7 @@ class ExchangeMonitorApp:
         exchanges_to_show = ['binance', 'bybit', 'okx'] if selected_exchange == 'all' else [selected_exchange]
         
         # Apply symbol filter
-        symbol_filter = self.filter_var.get().upper()
+        symbol_filter = self.filter_var.get().upper() if apply_filter else ""
         
         # Prepare data for display
         table_data = []
@@ -753,14 +719,16 @@ class ExchangeMonitorApp:
                     upper_data = self._prepare_table_data(
                         all_symbols,
                         self.upper_sort_column_var.get(),
-                        self.upper_sort_direction_var.get()
+                        self.upper_sort_direction_var.get(),
+                        apply_filter=True  # Apply filter to upper table
                     )
                     
                 if not self.lower_mouse_over_table or force_lower:
                     lower_data = self._prepare_table_data(
                         all_symbols,
                         self.lower_sort_column_var.get(),
-                        self.lower_sort_direction_var.get()
+                        self.lower_sort_direction_var.get(),
+                        apply_filter=False  # Don't apply filter to lower table
                     )
                     
                 # Update UI in a single operation at end

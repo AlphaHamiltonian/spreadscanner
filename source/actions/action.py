@@ -24,7 +24,7 @@ def send_message(message):
     # This is different from send_trade which respects BROADCAST_METHOD
     
     if not config.TELEGRAM_ENABLED:
-        print("Alert triggered but Telegram notifications are disabled.")
+        #print("Alert triggered but Telegram notifications are disabled.")
         return False
     
     return send_telegram_message(message)
@@ -32,7 +32,7 @@ def send_message(message):
 def send_telegram_message(message):
     """Send a message via Telegram bot."""
     if not config.TELEGRAM_ENABLED:
-        print("Telegram notifications are disabled.")
+        #print("Telegram notifications are disabled.")
         return False
     
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:

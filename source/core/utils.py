@@ -485,10 +485,15 @@ class DataStore:
             # CHANGE: Clear the new cache when symbols change
             self.symbol_equivalence_map.clear()
             self.equivalent_symbols = {}  # Keep clearing old cache for compatibility
+
     def mark_symbol_dirty(self, exchange, symbol):
         """Mark a symbol as needing spread recalculation"""
         with self.dirty_symbols_lock:
             self.dirty_symbols.add((exchange, symbol))
+            # If this is a spot symbol, also mark the corresponding future
+            if symbol.endswith('_SPOT'):
+                future_symbol = symbol.replace('_SPOT', '')
+                self.dirty_symbols.add((exchange, future_symbol))
 
     def update_related_prices(self, exchange, future_symbol, future_data, spot_symbol=None, spot_data=None):
         """Update futures and spot data atomically using symbol-level locks"""
