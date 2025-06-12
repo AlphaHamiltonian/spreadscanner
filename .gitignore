@@ -10,3 +10,7 @@ build/
 # Compiled python modules
 *.pyc
 __pycache__/
+
+# Ignore certs
+*.cert
+*.key
