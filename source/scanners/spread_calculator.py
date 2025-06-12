@@ -19,28 +19,27 @@ class SpreadCalculator:
     def __init__(self, data_store):
         """Initialize with reference to data store"""
         self.data_store = data_store
+        # This cache was originally in DataStore.symbol_equivalence_map
         self.symbol_equivalence_map = {}
         
     def calculate_all_spreads(self):
         """Calculate spreads only for symbols that have been updated"""
         current_time = time.time()
-        
-        # Skip if calculated recently
-        if current_time - self.data_store.spread_timestamp < 0.5:
+        # Add this early exit
+        if current_time - self.data_store.spread_timestamp < 0.5:  # Skip if calculated < 500ms ago
             return
-            
         # Get dirty symbols and clear the set
         with self.data_store.dirty_symbols_lock:
             if not self.data_store.dirty_symbols:
-                return
+                return  # Nothing to update
             symbols_to_process = self.data_store.dirty_symbols.copy()
             self.data_store.dirty_symbols.clear()
 
-        # Pre-compute what symbols we actually need
+        # CHANGE 1: Pre-compute what symbols we actually need
         required_symbols = {}
         for exchange, symbol in symbols_to_process:
             if symbol.endswith('_SPOT'):
-                continue
+                continue  # Skip spot symbols early
                 
             if exchange not in required_symbols:
                 required_symbols[exchange] = set()
@@ -60,7 +59,7 @@ class SpreadCalculator:
                             required_symbols[other] = set()
                         required_symbols[other].add(equiv)
 
-        # Only snapshot the symbols we actually need
+        # CHANGE 2: Only snapshot the symbols we actually need
         exchange_snapshots = {}
         for exchange, needed_symbols in required_symbols.items():
             exchange_snapshots[exchange] = {}
@@ -70,13 +69,14 @@ class SpreadCalculator:
                 with symbol_lock:  # Read lock
                     symbol_data = self.data_store.price_data[exchange].get(symbol, {})
                     if symbol_data and 'bid' in symbol_data and 'ask' in symbol_data:
-                        # Only copy essential fields
+                        # CHANGE 3: Only copy essential fields
                         exchange_snapshots[exchange][symbol] = {
                             'bid': symbol_data['bid'],
                             'ask': symbol_data['ask'],
                             'timestamp': symbol_data.get('timestamp', 0)
                         }
 
+        # Rest of your code remains exactly the same...
         # Calculate spreads only for dirty symbols
         for exchange, dirty_symbol in symbols_to_process:
             if exchange not in exchange_snapshots:
@@ -113,7 +113,7 @@ class SpreadCalculator:
                 if other == exchange:
                     continue
                 
-                # Use cache for performance
+                #equiv = symbol_matcher.find_equivalent_symbol(exchange, dirty_symbol, other)
                 cache_key = (exchange, dirty_symbol, other)
                 if cache_key in self.symbol_equivalence_map:
                     equiv = self.symbol_equivalence_map[cache_key]
@@ -173,19 +173,20 @@ class SpreadCalculator:
         is_spot1 = symbol1 and "_SPOT" in symbol1
         is_spot2 = symbol2 and "_SPOT" in symbol2
         
+        
         # Determine maximum allowed age for each source
         max_age1 = Config.SPOT_THRESHOLD if is_spot1 else Config.FUTURES_THRESHOLD
         max_age2 = Config.SPOT_THRESHOLD if is_spot2 else Config.FUTURES_THRESHOLD
         
         # Check if data is stale (using appropriate thresholds)
-        if price1_age > max_age1 or price2_age > max_age2 or abs(price1_age-price2_age) > Config.DIFFERENCE_THRESHOLD:
+        if price1_age > max_age1 or price2_age > max_age2 or abs(price1_age-price2_age)> Config.DIFFERENCE_THRESHOLD:
             # Log with threshold info (reduce volume with sampling)
             if random.random() < 0.00001:  # Log less of occurrences
                 logger.warning(f"Stale data: {source1}({price1_age:.2f}s/{max_age1}s) vs "
                             f"{source2}({price2_age:.2f}s/{max_age2}s)")
             return 'N/A'
         
-        # Rest of spread calculation
+        # Rest of your spread calculation remains the same
         bid1 = price1['bid']
         ask1 = price1['ask']
         bid2 = price2['bid']
@@ -204,5 +205,4 @@ class SpreadCalculator:
         alert_manager.check_spread_alert(spread_pct, source1, source2, exchange1, exchange2)
         return spread_pct
 
-# Global calculator instance will be created by DataStore
-spread_calculator = None
+__all__ = ['SpreadCalculator']
