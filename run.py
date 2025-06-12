@@ -14,8 +14,6 @@ from source.actions.action import send_message, set_broadcast_method
 from source.websockets.websocket_server import trading_signal_server
 import argparse
 
-
-
 # Disable WebSocket trace for cleaner logs
 websocket.enableTrace(False)
 
@@ -147,73 +145,6 @@ def run_headless(websocket_port=8765, use_ssl=True):
         
         logger.info("Headless monitor terminated")
 
-def test_trades(test_type="spread"):
-    """Send test trades through the alert system"""
-    from source.actions.alerts import alert_manager
-    import time
-    
-    logger.info(f"Starting test trade: {test_type}")
-    
-    if test_type == "spread":
-        # Test spread alert with predefined values
-        # This simulates a spread condition that would trigger trades
-        spread_pct = 1.5  # Above the 0.9% threshold
-        source1 = "binance:BTCUSDT"
-        source2 = "binance:BTCUSDT_SPOT"
-        exchange1 = "binance"
-        exchange2 = "binance"
-        
-        logger.info(f"Testing spread alert: {source1} vs {source2} at {spread_pct}%")
-        
-        # Force the alert manager to think this is a valid condition
-        # by pre-populating the threshold timestamps
-        asset_pair_key = f"{source1}_vs_{source2}"
-        current_time = time.time()
-        
-        # Simulate that the threshold has been exceeded for the required time
-        alert_manager.threshold_timestamps[asset_pair_key] = [
-            current_time - i for i in range(10)  # 10 seconds of threshold exceeded
-        ]
-        
-        # Clear any cooldowns
-        alert_manager.last_notification_time.pop(asset_pair_key, None)
-        alert_manager.last_trade_time.pop(asset_pair_key, None)
-        
-        # Trigger the alert
-        alert_manager.check_spread_alert(spread_pct, source1, source2, exchange1, exchange2)
-        
-        logger.info("Test spread alert completed")
-        
-    elif test_type == "movement":
-        # Test movement alert with predefined values
-        exchange = "binance"
-        symbol = "BTCUSDT_SPOT"
-        old_price = 40000.0
-        new_price = 44000.0  # 10% increase
-        pct_change = 10.0
-        time_diff = 1.5  # 1.5 seconds
-        
-        logger.info(f"Testing movement alert: {exchange}:{symbol} from {old_price} to {new_price}")
-        
-        # Clear any cooldowns
-        key = f"{exchange}:{symbol}"
-        alert_manager.last_movement_alert_time.pop(key, None)
-        
-        # Trigger the alert
-        alert_manager.check_movement_alert(exchange, symbol, old_price, new_price, pct_change, time_diff)
-        
-        logger.info("Test movement alert completed")
-        
-    elif test_type == "both":
-        # Test both types
-        logger.info("Testing both spread and movement alerts")
-        test_trades("spread")
-        time.sleep(2)  # Brief pause between tests
-        test_trades("movement")
-        
-    else:
-        logger.error(f"Unknown test type: {test_type}. Use 'spread', 'movement', or 'both'")
-
 #---------------------------------------------
 # UI Mode Functions
 #---------------------------------------------
@@ -316,58 +247,7 @@ def run_with_ui():
         exit_timer.start()
         
         logger.info("Application terminated")
-        
-def run_headless_with_test(websocket_port=8765, use_ssl=True, test_type='spread'):
-    """Run headless mode, wait for initialization, then run test"""
-    from source.headless import HeadlessMonitor
-    
-    # Start WebSocket server
-    if start_websocket_server(websocket_port, use_ssl):
-        logger.info("WebSocket server started successfully")
-        set_broadcast_method("websocket" if not config.TELEGRAM_ENABLED else "both")
-    
-    logger.info("Starting in headless mode with test...")
-    
-    # Set up signal handling
-    def signal_handler(sig, frame):
-        logger.info(f"Received signal {sig}, shutting down gracefully...")
-        stop_event.set()
-        time.sleep(1)
-    
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-    
-    # Initialize headless monitor
-    monitor = HeadlessMonitor()
-    
-    # Start the spread calculator thread
-    spread_calculator_thread = threading.Thread(
-        target=run_spread_calculator, 
-        daemon=True,
-        name="spread_calculator"
-    )
-    spread_calculator_thread.start()
-    active_threads["spread_calculator"] = spread_calculator_thread
-    
-    # Start exchange connections
-    monitor.start_exchange_threads()
-    
-    # Wait for initialization
-    logger.info("Waiting for system initialization...")
-    time.sleep(10)  # Give exchanges time to connect
-    
-    # Run the test
-    logger.info(f"Running test trade: {test_type}")
-    test_trades(test_type)
-    
-    # Wait for test to complete
-    time.sleep(5)
-    
-    # Shutdown
-    logger.info("Test completed, shutting down...")
-    stop_event.set()
-    monitor.shutdown()
-    os._exit(0)
+
 #---------------------------------------------
 # Main Application Entry Point
 #---------------------------------------------
