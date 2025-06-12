@@ -12,6 +12,7 @@ class AlertManager:
         self.last_notification_time = {}
         self.last_funding_notif_time = {}
         self.last_trade_time = {}
+        self.last_movement_alert_time = {} 
 
     def check_spread_alert(self, spread_pct, source1, source2, exchange1, exchange2):
             """Check spread thresholds and send alerts"""
@@ -96,7 +97,37 @@ class AlertManager:
             if send_message(msg):
                 self.last_funding_notif_time[key] = now
                 logger.info("Funding alert sent for %s. Next in 30 min.", key)
-    
+
+    def check_movement_alert(self, exchange: str, symbol: str, old_price: float, 
+                        new_price: float, pct_change: float, time_diff: float):
+        """Check rapid price movement alerts with cooldown"""
+        key = f"{exchange}:{symbol}"
+        current_time = time.time()
+        
+        # Check cooldown (same pattern as funding alerts)
+        if key in self.last_movement_alert_time:
+            if current_time - self.last_movement_alert_time[key] < Config.MOVEMENT_ALERT_COOLDOWN:
+                return False
+                
+        # Send alert
+        message = (
+            f"🚀 RAPID PRICE MOVEMENT DETECTED\n"
+            f"{exchange}:{symbol}\n"
+            f"Price: {old_price:.8f} → {new_price:.8f}\n"
+            f"Change: +{pct_change:.2f}% in {time_diff:.1f}s"
+        )
+        
+        logger.warning(f"Rapid movement: {message}")
+        
+        # Send notification (using existing send_message)
+        try:
+            send_message(message)
+            self.last_movement_alert_time[key] = current_time
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send movement alert: {e}")
+            return False    
+        
     def cleanup_old_data(self):
         """Clean up old alert data"""
         current_time = time.time()
@@ -118,6 +149,10 @@ class AlertManager:
         old_keys = [k for k, v in self.last_funding_notif_time.items() if current_time - v > 7200]
         for key in old_keys:
             del self.last_funding_notif_time[key]
+
+        old_keys = [k for k, v in self.last_movement_alert_time.items() if current_time - v > 7200]
+        for key in old_keys:
+            del self.last_movement_alert_time[key]
 
 # Global instance
 alert_manager = AlertManager()

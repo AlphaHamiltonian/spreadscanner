@@ -8,7 +8,6 @@ import logging
 from collections import deque, defaultdict
 from threading import Lock
 from typing import Dict, Tuple, Optional
-from source.actions.action import send_message
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +21,6 @@ class PriceMovementDetector:
         # Price history: {exchange: {symbol: deque[(timestamp, price, type)]}}
         self.price_history = defaultdict(lambda: defaultdict(lambda: deque(maxlen=50)))
         self.history_lock = Lock()
-        
-        # Alert cooldown to prevent spam
-        self.last_alert_time = {}
-        self.alert_cooldown = 60  # 1 minute between alerts for same symbol
         
         # Statistics
         self.detections = 0
@@ -80,34 +75,18 @@ class PriceMovementDetector:
                     break
     
     def _trigger_alert(self, exchange: str, symbol: str, old_price: float, 
-                       new_price: float, pct_change: float, time_diff: float):
+                    new_price: float, pct_change: float, time_diff: float):
         """Trigger alert for rapid price movement"""
-        key = f"{exchange}:{symbol}"
-        current_time = time.time()
+        # Import alert_manager instead of send_message
+        from source.actions.alerts import alert_manager
         
-        # Check cooldown
-        if key in self.last_alert_time:
-            if current_time - self.last_alert_time[key] < self.alert_cooldown:
-                return
-                
-        # Send alert
-        message = (
-            f"🚀 RAPID PRICE MOVEMENT DETECTED\n"
-            f"{exchange}:{symbol}\n"
-            f"Price: {old_price:.8f} → {new_price:.8f}\n"
-            f"Change: +{pct_change:.2f}% in {time_diff:.1f}s"
-        )
-        
-        logger.warning(f"Rapid movement: {message}")
-        
-        # Send to telegram/websocket
-        try:
-            send_message(message)
-            self.last_alert_time[key] = current_time
+        # Let alert_manager handle the cooldown and sending
+        if alert_manager.check_movement_alert(
+            exchange, symbol, old_price, new_price, 
+            pct_change, time_diff
+        ):
             self.detections += 1
-            self.last_detection_time = current_time
-        except Exception as e:
-            logger.error(f"Failed to send movement alert: {e}")
+            self.last_detection_time = time.time()
     
     def get_stats(self) -> Dict[str, any]:
         """Get detector statistics"""
