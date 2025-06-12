@@ -985,10 +985,10 @@ class BybitConnector(BaseExchangeConnector):
                 time.sleep(0.1)
             for symbol, rate in results:
                 data_store.update_funding_rate('bybit', symbol, rate)                
-            # Apply all updates at once - use write lock
-            with WriteLock(data_store.exchange_rw_locks['bybit']):
-                for symbol, rate in results:
-                    data_store.funding_rates['bybit'][symbol] = rate
+            # # Apply all updates at once - use write lock
+            # with WriteLock(data_store.exchange_rw_locks['bybit']):
+            #     for symbol, rate in results:
+            #         data_store.funding_rates['bybit'][symbol] = rate
                     
             return len(results)
         except Exception as e:

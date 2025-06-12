@@ -664,9 +664,9 @@ class OkxConnector(BaseExchangeConnector):
             for symbol, rate in results:
                         data_store.update_funding_rate('okx', symbol, rate)                
             # Apply all updates at once - use write lock
-            with WriteLock(data_store.exchange_rw_locks['okx']):
-                for symbol, rate in results:
-                    data_store.funding_rates['okx'][symbol] = rate
+            # with WriteLock(data_store.exchange_rw_locks['okx']):
+            #     for symbol, rate in results:
+            #         data_store.funding_rates['okx'][symbol] = rate
                     
             return len(results)
         except Exception as e:
