@@ -267,9 +267,7 @@ def main():
     parser.add_argument('--no-ssl', 
                         action='store_true',
                         help='Disable SSL for WebSocket server (use ws:// instead of wss://)')
-    parser.add_argument('--test-trade', 
-                    choices=['spread', 'movement', 'both'],
-                    help='Send test trades for testing')
+
     args = parser.parse_args()
     
     # Set broadcast method
@@ -283,13 +281,7 @@ def main():
         config.TELEGRAM_ENABLED = True if args.broadcast in ['telegram', 'both'] else False
         if config.TELEGRAM_ENABLED:
             send_message("Starting exchange monitor with Telegram notifications")
-            
-        # If test trade, modify headless to run test after initialization
-        if args.test_trade:
-            # Start headless with test flag
-            run_headless_with_test(args.websocket_port, use_ssl, args.test_trade)
-        else:
-            run_headless(args.websocket_port, use_ssl)
+        run_headless(args.websocket_port, use_ssl)
     else:
         config.TELEGRAM_ENABLED = False
         run_with_ui()

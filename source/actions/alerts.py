@@ -51,27 +51,53 @@ class AlertManager:
                 if exchange1 == exchange2 and exchange1 == "binance":
                     # Check 24-hour cooldown for trades (86400 seconds = 24 hours)
                     if current_time - last_trade_time > 86400:
-                        #SPOT on FUTURE
-                        custom_params_SoF = {
-                            'bid_qty': '0',
-                            'ask_qty': '10u',
-                            'offset_bid': '-550b',
-                            'offset_ask': '550b'
-                        }
-                        #FUTURE on Spot
-                        custom_params_FoS = {
-                            'bid_qty': '10u',
-                            'ask_qty': '0',
-                            'offset_bid': '-550b',
-                            'offset_ask': '550b'
-                        }                      
-                        if send_trade(source1, source2, exchange1, exchange2, spread_pct,custom_params_SoF):
-                            self.last_trade_time[asset_pair_key] = current_time  # Update trade time
-                            logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")
 
-                        if send_trade(source2, source1, exchange2, exchange1, spread_pct,custom_params_FoS):
-                            self.last_trade_time[asset_pair_key] = current_time  # Update trade time
-                            logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")                    
+                        if spread_pct >0:
+                            #SPOT on FUTURE
+                            custom_params_SoF = {
+                                'bid_qty': '0',
+                                'ask_qty': '10u',
+                                'offset_bid': '-50b',
+                                'offset_ask': '50b'
+                            }
+                            #FUTURE on Spot
+                            custom_params_FoS = {
+                                'bid_qty': '10u',
+                                'ask_qty': '0',
+                                'offset_bid': '-50b',
+                                'offset_ask': '50b'
+                            }
+                            if send_trade(source1, source2, exchange1, exchange2, spread_pct,custom_params_SoF):
+                                self.last_trade_time[asset_pair_key] = current_time  # Update trade time
+                                logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")
+
+                            if send_trade(source2, source1, exchange2, exchange1, spread_pct,custom_params_FoS):
+                                self.last_trade_time[asset_pair_key] = current_time  # Update trade time
+                                logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")  
+                        else:
+                            #SPOT on FUTURE
+                            custom_params_SoF = {
+                                'bid_qty': '11u',
+                                'ask_qty': '11u',
+                                'offset_bid': '-600b',
+                                'offset_ask': '600b'
+                            }
+                            #FUTURE on Spot
+                            custom_params_FoS = {
+                                'bid_qty': '11u',
+                                'ask_qty': '11u',
+                                'offset_bid': '-600b',
+                                'offset_ask': '600b'
+                            }
+                            if send_trade(source1, source2, exchange1, exchange2, spread_pct,custom_params_SoF):
+                                self.last_trade_time[asset_pair_key] = current_time  # Update trade time
+                                logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")
+
+                            if send_trade(source2, source1, exchange2, exchange1, spread_pct,custom_params_FoS):
+                                self.last_trade_time[asset_pair_key] = current_time  # Update trade time
+                                logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")                              
+
+
                     # Regular notification logic remains unchanged
                     if len(unique_seconds) >= Config.NUMBER_OF_SEC_THRESHOLD:
                         if send_message(notification_message):
@@ -133,7 +159,7 @@ class AlertManager:
             # Send trade: spot on itself (theo on spot)
             custom_params = {
                 'bid_qty': '0',
-                'ask_qty': '10u',
+                'ask_qty': '12u',
                 'offset_bid': '-500b',
                 'offset_ask': '500b'
             }
