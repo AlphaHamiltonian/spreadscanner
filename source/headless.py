@@ -2,14 +2,14 @@ import logging
 import threading
 import concurrent.futures
 import time
-from source.config import stop_event, active_threads
-from source.utils import data_store
+from source.core.config import stop_event, active_threads
+from source.core.utils import data_store
 from source.exchanges.binance import BinanceConnector
 from source.exchanges.bybit import BybitConnector
 from source.exchanges.okx import OkxConnector
-import source.config as config
+import source.core.config as config
 # Add with the other imports in headless.py
-from source.price_movement_detector import initialize_detector, movement_detector
+from source.scanners.price_movement_detector import initialize_detector, movement_detector
 
 logger = logging.getLogger(__name__)
 

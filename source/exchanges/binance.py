@@ -5,11 +5,11 @@ import logging
 import random
 import orjson as json
 import websocket
-from source.config import stop_event
+from source.core.config import stop_event
 import time
 from source.exchanges.base import BaseExchangeConnector
-from source.utils import data_store, WebSocketManager, WriteLock
-from source.symbol_matcher import symbol_matcher
+from source.core.utils import data_store, WebSocketManager, WriteLock
+from source.core.symbol_matcher import symbol_matcher
 
 logger = logging.getLogger(__name__) # module-specific logger
 

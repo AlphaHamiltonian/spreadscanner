@@ -6,9 +6,9 @@ import time
 import math
 import random
 import csv
-from source.config import stop_event, active_threads
+from source.core.config import stop_event, active_threads
 import time
-from source.utils import WriteLock, data_store
+from source.core.utils import WriteLock, data_store
 import logging
 from source.exchanges.binance import BinanceConnector
 from source.exchanges.bybit import BybitConnector

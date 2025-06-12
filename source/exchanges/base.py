@@ -1,4 +1,4 @@
-from source.utils import HttpSessionManager
+from source.core.utils import HttpSessionManager
 
 class BaseExchangeConnector:
     """Base class for exchange connectors with common functionality"""
