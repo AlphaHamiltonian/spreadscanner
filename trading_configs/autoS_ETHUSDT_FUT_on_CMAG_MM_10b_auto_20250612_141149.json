@@ -37,7 +37,7 @@
     "configName": "MM 10b-auto",
     "orderType": 0,
     "updateFrequencyTick": "10b",
-    "postOnlyOption": "Yes",
+    "postOnlyOption": "No",
     "restartTradeOnPartial": "false",
     "waitTick": 2000
   },
@@ -50,7 +50,7 @@
     "delayHedgeTime": 2000
   },
   "metadata": {
-    "generated_at": "2025-06-12_13_39_42",
+    "generated_at": "2025-06-12_14_11_41",
     "strategy": "spread_trade",
     "spread_pct": "1.2"
   }

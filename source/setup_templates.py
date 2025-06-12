@@ -122,7 +122,7 @@ def create_templates(overwrite=False):
             "configName": "MM 10b-auto",
             "orderType": 0,
             "updateFrequencyTick": "10b",
-            "postOnlyOption": "Yes",
+            "postOnlyOption": "No",
             "restartTradeOnPartial": "false",
             "waitTick": 2000
         }
