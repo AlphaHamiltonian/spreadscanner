@@ -64,19 +64,21 @@ class AlertManager:
                             'ask_qty': '0',
                             'offset_bid': '-50b',
                             'offset_ask': '50b'
-                        }                        
-                        if send_trade(source1, source2, exchange1, exchange2, spread_pct,custom_params_SoF):
-                            self.last_trade_time[asset_pair_key] = current_time  # Update trade time
-                            logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")
+                        }
+                        if spread_pct >0:                        
+                            if send_trade(source1, source2, exchange1, exchange2, spread_pct,custom_params_SoF):
+                                self.last_trade_time[asset_pair_key] = current_time  # Update trade time
+                                logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")
 
-                        if send_trade(source2, source1, exchange2, exchange1, spread_pct,custom_params_FoS):
-                            self.last_trade_time[asset_pair_key] = current_time  # Update trade time
-                            logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")                    
+                            if send_trade(source2, source1, exchange2, exchange1, spread_pct,custom_params_FoS):
+                                self.last_trade_time[asset_pair_key] = current_time  # Update trade time
+                                logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")                    
                     # Regular notification logic remains unchanged
                     if len(unique_seconds) >= Config.NUMBER_OF_SEC_THRESHOLD:
                         if send_message(notification_message):
                             self.last_notification_time[asset_pair_key] = current_time
                             logger.info(f"Notification sent for {asset_pair_key}. Next notification in 30 minutes.")
+
     def check_funding_alert(self, exchange, symbol, rate):
         """Check funding rate alerts"""
         try:
@@ -119,14 +121,36 @@ class AlertManager:
         
         logger.warning(f"Rapid movement: {message}")
         
-        # Send notification (using existing send_message)
-        try:
-            send_message(message)
+        # Send notification
+        if send_message(message):
             self.last_movement_alert_time[key] = current_time
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send movement alert: {e}")
-            return False    
+            logger.info(f"Movement alert sent for {key}")
+        
+        # Send trade if it's a spot symbol
+        if symbol.endswith('_SPOT'):
+            # Remove _SPOT to get the base symbol
+            base_symbol = symbol.replace('_SPOT', '')
+            
+            # Send trade: spot on itself (theo on spot)
+            custom_params = {
+                'bid_qty': '0',
+                'ask_qty': '10u',
+                'offset_bid': '-500b',
+                'offset_ask': '500b'
+            }
+            
+            # Trade spot on spot (theo price on itself)
+            if send_trade(
+                f"{exchange}:{base_symbol}",      # source1: spot
+                f"{exchange}:{base_symbol}",      # source2: same spot (theo on itself)
+                exchange,                    # exchange1
+                exchange,                    # exchange2
+                pct_change,                  # spread percentage
+                custom_params
+            ):
+                logger.info(f"Movement trade sent for {exchange}:{symbol}")
+        
+        return True 
         
     def cleanup_old_data(self):
         """Clean up old alert data"""

@@ -592,7 +592,7 @@ class DataStore:
                 data['last'] = last
                 
             self.price_data[exchange][symbol].update(data)
-        if pmd.movement_detector and not symbol.endswith('_SPOT') and exchange != 'okx':
+        if pmd.movement_detector and symbol.endswith('_SPOT') and exchange == 'binance':
             if bid*ask != 0:
                 mid_price = (bid + ask) / 2
                 pmd.movement_detector.record_price(exchange, symbol, mid_price, 'mid')    
