@@ -4,14 +4,14 @@ import time
 import logging
 import signal
 import websocket
-from source.config import stop_event, active_threads
-import source.config as config
+from source.core.config import stop_event, active_threads
+import source.core.config as config
 import signal
 import time
 import argparse
-from source.utils import data_store
-from source.action import send_message, set_broadcast_method
-from source.websocket_server import trading_signal_server
+from source.core.utils import data_store
+from source.actions.action import send_message, set_broadcast_method
+from source.websockets.websocket_server import trading_signal_server
 
 
 
