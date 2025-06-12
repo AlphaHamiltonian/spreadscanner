@@ -34,7 +34,8 @@ class ConfigGenerator:
     
     def _load_strategy_config(self):
         """Load strategy parameters from config file or use defaults"""
-        config_file = Path(__file__).parent / "strategy_config.json"
+        #config_file = Path(__file__).parent / "strategy_config.json"
+        config_file = Path(__file__).parent / "config_templates" / "strategy_config.json"
         
         if config_file.exists():
             try:

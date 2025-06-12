@@ -8,7 +8,7 @@ from datetime import datetime
 
 def create_templates(overwrite=False):
     """Create all template files and strategy config"""
-    base_dir = Path("source/config_templates")
+    base_dir = Path("source/actions/config_templates") 
     base_dir.mkdir(parents=True, exist_ok=True)
     
     # Create subdirectories
@@ -193,7 +193,8 @@ def create_templates(overwrite=False):
                 created += 1
     
     # Create strategy_config.json in source directory
-    strategy_config_path = Path("source/strategy_config.json")
+    #strategy_config_path = Path("source/actions/strategy_config.json")
+    strategy_config_path = Path("source/actions/config_templates/strategy_config.json")
     if strategy_config_path.exists() and not overwrite:
         print(f"⏭️  Skipped: {strategy_config_path}")
         skipped += 1

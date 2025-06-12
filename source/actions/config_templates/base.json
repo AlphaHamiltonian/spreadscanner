@@ -15,7 +15,7 @@
     "trade_config": "@trade_strategies/{trade_config_file}",
     "hedge_config": "@hedge_strategies/{hedge_config_file}",
     "metadata": {
-        "generated_at": "2025-06-05_10_42_42",
+        "generated_at": "2025-06-12_09_52_01",
         "strategy": "{strategy_type}",
         "spread_pct": "{spread_pct}"
     }
