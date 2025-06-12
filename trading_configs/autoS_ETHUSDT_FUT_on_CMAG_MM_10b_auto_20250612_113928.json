@@ -50,7 +50,7 @@
     "delayHedgeTime": 2000
   },
   "metadata": {
-    "generated_at": "2025-06-12_09_52_01",
+    "generated_at": "2025-06-12_11_39_18",
     "strategy": "spread_trade",
     "spread_pct": "1.2"
   }
