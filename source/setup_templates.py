@@ -20,7 +20,7 @@ def create_templates(overwrite=False):
     # Template definitions
     templates = {
         "base.json": {
-            "request_type": "scan",
+            "request_type": "trade",
             "theo_type": "{theo_type}",
             "trade_strategy": "{trade_strategy}",
             "hedge_strategy": "{hedge_strategy}",
