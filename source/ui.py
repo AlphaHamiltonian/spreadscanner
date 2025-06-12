@@ -932,6 +932,8 @@ class ExchangeMonitorApp:
                 elif exchange_name == "bybit":
                     # This already handles everything in the proper sequence
                     connector.initialize()
+                    active_threads[f"{exchange_name}_funding"] = self.executor.submit(connector.update_funding_rates)
+                    active_threads[f"{exchange_name}_changes"] = self.executor.submit(connector.update_24h_changes)                    
                 elif exchange_name == "okx":
                     connector.fetch_symbols()
                     connector.fetch_spot_symbols()

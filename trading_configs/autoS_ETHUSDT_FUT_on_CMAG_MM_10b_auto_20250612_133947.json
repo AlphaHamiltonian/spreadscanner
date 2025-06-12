@@ -1,5 +1,5 @@
 {
-  "request_type": "scan",
+  "request_type": "trade",
   "theo_type": "FAST",
   "trade_strategy": "MM",
   "hedge_strategy": "HLimit",
@@ -50,7 +50,7 @@
     "delayHedgeTime": 2000
   },
   "metadata": {
-    "generated_at": "2025-06-12_11_39_18",
+    "generated_at": "2025-06-12_13_39_42",
     "strategy": "spread_trade",
     "spread_pct": "1.2"
   }
