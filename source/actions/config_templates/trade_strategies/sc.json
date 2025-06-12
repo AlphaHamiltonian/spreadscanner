@@ -1,0 +1,9 @@
+{
+    "comments": "SC auto-{counter}",
+    "configName": "SC-auto",
+    "orderType": 2,
+    "spikeCheckTime": 0,
+    "autoSizing": "no",
+    "maxQty": 0,
+    "minQty": 0
+}

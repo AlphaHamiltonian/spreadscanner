@@ -1,0 +1,21 @@
+{
+    "comments": "Momentum autoGen-{symbol}-{exchange_short}-{counter}",
+    "configName": "autoM-{symbol}-{exchange_short}",
+    "checkTickersFrequency": 30000,
+    "underlyingAssets": {
+        "assetSymbol": "{symbol}",
+        "assetExchange": "{exchange}",
+        "currencySymbol": "",
+        "currencyExchange": "",
+        "hedgeAsset": "yes",
+        "hedgeCurrency": "no",
+        "minSizeOrderAsset": "6u",
+        "minSizeOrderCurrency": "6u"
+    },
+    "tradeAsset": {
+        "assetSymbol": "{symbol}",
+        "assetExchange": "{exchange}",
+        "minSizeOrder": "6u",
+        "currencyType": "Divide"
+    }
+}
