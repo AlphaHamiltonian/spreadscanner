@@ -77,7 +77,7 @@ def send_websocket_message(message, spread_data=None):
         print(f"Error sending WebSocket message: {e}")
         return False
 
-def send_trade(source1, source2, exchange1, exchange2, spread_pct, custom_params=None):
+def send_trade(source1, source2, exchange1, exchange2, spread_pct, custom_params=None, strategy='MM'):
     """Generate trading configs and send via configured broadcast method"""
     print(f"Sending trade signal via {BROADCAST_METHOD}")
     
@@ -85,7 +85,7 @@ def send_trade(source1, source2, exchange1, exchange2, spread_pct, custom_params
         
         config1 = generate_spread_configs_direct(
             source1, source2, exchange1, exchange2, spread_pct, 
-            strategy='MM',
+            strategy=strategy,
             custom=custom_params
         )
         

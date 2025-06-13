@@ -67,11 +67,11 @@ class AlertManager:
                                 'offset_bid': '-50b',
                                 'offset_ask': '50b'
                             }
-                            if send_trade(source1, source2, exchange1, exchange2, spread_pct,custom_params_SoF):
+                            if send_trade(source1, source2, exchange1, exchange2, spread_pct,custom_params_SoF,'SC'):
                                 self.last_trade_time[asset_pair_key] = current_time  # Update trade time
                                 logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")
 
-                            if send_trade(source2, source1, exchange2, exchange1, spread_pct,custom_params_FoS):
+                            if send_trade(source2, source1, exchange2, exchange1, spread_pct,custom_params_FoS,'SC'):
                                 self.last_trade_time[asset_pair_key] = current_time  # Update trade time
                                 logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")  
                         else:
@@ -89,11 +89,11 @@ class AlertManager:
                                 'offset_bid': '-600b',
                                 'offset_ask': '600b'
                             }
-                            if send_trade(source1, source2, exchange1, exchange2, spread_pct,custom_params_SoF):
+                            if send_trade(source1, source2, exchange1, exchange2, spread_pct,custom_params_SoF,'MM'):
                                 self.last_trade_time[asset_pair_key] = current_time  # Update trade time
                                 logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")
 
-                            if send_trade(source2, source1, exchange2, exchange1, spread_pct,custom_params_FoS):
+                            if send_trade(source2, source1, exchange2, exchange1, spread_pct,custom_params_FoS,'MM'):
                                 self.last_trade_time[asset_pair_key] = current_time  # Update trade time
                                 logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")                              
 
@@ -171,7 +171,8 @@ class AlertManager:
                 exchange,                    # exchange1
                 exchange,                    # exchange2
                 pct_change,                  # spread percentage
-                custom_params
+                custom_params,
+                'MM'
             ):
                 logger.info(f"Movement trade sent for {exchange}:{symbol}")
         
