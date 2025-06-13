@@ -1,5 +1,6 @@
 {
     "request_type": "trade",
+    "expire_time": 300,
     "theo_type": "{theo_type}",
     "trade_strategy": "{trade_strategy}",
     "hedge_strategy": "{hedge_strategy}",
@@ -15,7 +16,7 @@
     "trade_config": "@trade_strategies/{trade_config_file}",
     "hedge_config": "@hedge_strategies/{hedge_config_file}",
     "metadata": {
-        "generated_at": "2025-06-12_14_11_41",
+        "generated_at": "2025-06-13_12_58_08",
         "strategy": "{strategy_type}",
         "spread_pct": "{spread_pct}"
     }

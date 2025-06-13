@@ -21,6 +21,7 @@ def create_templates(overwrite=False):
     templates = {
         "base.json": {
             "request_type": "trade",
+            "expire_time": 300,
             "theo_type": "{theo_type}",
             "trade_strategy": "{trade_strategy}",
             "hedge_strategy": "{hedge_strategy}",
