@@ -202,7 +202,7 @@ class SpreadCalculator:
         
         # Express as percentage
         spread_pct = avg_ratio * 100
-        alert_manager.check_spread_alert(spread_pct, source1, source2, exchange1, exchange2)
+        alert_manager.check_spread_alert(spread_pct, source1, source2, exchange1, exchange2,bid1,ask1,bid2,ask2)
         return spread_pct
 
 __all__ = ['SpreadCalculator']

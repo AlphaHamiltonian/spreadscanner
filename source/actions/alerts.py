@@ -14,7 +14,7 @@ class AlertManager:
         self.last_trade_time = {}
         self.last_movement_alert_time = {} 
 
-    def check_spread_alert(self, spread_pct, source1, source2, exchange1, exchange2):
+    def check_spread_alert(self, spread_pct, source1, source2, exchange1, exchange2,bid1,ask1,bid2,ask2):
             """Check spread thresholds and send alerts"""
             if not (spread_pct > Config.UPPER_LIMIT or spread_pct < Config.LOWER_LIMIT):
                 return
@@ -51,52 +51,18 @@ class AlertManager:
                 if exchange1 == exchange2 and exchange1 == "binance":
                     # Check 24-hour cooldown for trades (86400 seconds = 24 hours)
                     if current_time - last_trade_time > 86400:
-
-                        if spread_pct >0:
-                            #SPOT on FUTURE
-                            custom_params_SoF = {
-                                'bid_qty': '0',
-                                'ask_qty': '10u',
-                                'offset_bid': '-50b',
-                                'offset_ask': '50b'
-                            }
-                            #FUTURE on Spot
-                            custom_params_FoS = {
-                                'bid_qty': '10u',
-                                'ask_qty': '0',
-                                'offset_bid': '-50b',
-                                'offset_ask': '50b'
-                            }
-                            if send_trade(source1, source2, exchange1, exchange2, spread_pct,custom_params_SoF,'SC'):
-                                self.last_trade_time[asset_pair_key] = current_time  # Update trade time
-                                logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")
-
-                            if send_trade(source2, source1, exchange2, exchange1, spread_pct,custom_params_FoS,'SC'):
-                                self.last_trade_time[asset_pair_key] = current_time  # Update trade time
-                                logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")  
-                        else:
-                            #SPOT on FUTURE
-                            custom_params_SoF = {
-                                'bid_qty': '11u',
-                                'ask_qty': '11u',
-                                'offset_bid': '-600b',
-                                'offset_ask': '600b'
-                            }
-                            #FUTURE on Spot
-                            custom_params_FoS = {
-                                'bid_qty': '11u',
-                                'ask_qty': '11u',
-                                'offset_bid': '-600b',
-                                'offset_ask': '600b'
-                            }
-                            if send_trade(source1, source2, exchange1, exchange2, spread_pct,custom_params_SoF,'MM'):
-                                self.last_trade_time[asset_pair_key] = current_time  # Update trade time
-                                logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")
-
-                            if send_trade(source2, source1, exchange2, exchange1, spread_pct,custom_params_FoS,'MM'):
-                                self.last_trade_time[asset_pair_key] = current_time  # Update trade time
-                                logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")                              
-
+                        ask_qty = round(100/max(bid1,ask1,bid2,ask2))
+                        offset= max(bid1,ask1,bid2,ask2)*2
+                        #SPOT on FUTURE
+                        custom_params_SoF = {
+                            'bid_qty': '0',
+                            'ask_qty': ask_qty,
+                            'offset_bid': -offset,
+                            'offset_ask': offset
+                        }
+                        if send_trade(source2, source2, exchange2, exchange2, spread_pct,custom_params_SoF,'MM'):
+                            self.last_trade_time[asset_pair_key] = current_time  # Update trade time
+                            logger.info(f"Trade sent for {asset_pair_key}. Next trade allowed in 24 hours.")
 
                     # Regular notification logic remains unchanged
                     if len(unique_seconds) >= Config.NUMBER_OF_SEC_THRESHOLD:
@@ -150,31 +116,6 @@ class AlertManager:
         if send_message(message):
             self.last_movement_alert_time[key] = current_time
             logger.info(f"Movement alert sent for {key}")
-        
-        # Send trade if it's a spot symbol
-        if symbol.endswith('_SPOT'):
-            # Remove _SPOT to get the base symbol
-            base_symbol = symbol.replace('_SPOT', '')
-            
-            # Send trade: spot on itself (theo on spot)
-            custom_params = {
-                'bid_qty': '0',
-                'ask_qty': '12u',
-                'offset_bid': '-500b',
-                'offset_ask': '500b'
-            }
-            
-            # Trade spot on spot (theo price on itself)
-            if send_trade(
-                f"{exchange}:{base_symbol}",      # source1: spot
-                f"{exchange}:{base_symbol}",      # source2: same spot (theo on itself)
-                exchange,                    # exchange1
-                exchange,                    # exchange2
-                pct_change,                  # spread percentage
-                custom_params,
-                'MM'
-            ):
-                logger.info(f"Movement trade sent for {exchange}:{symbol}")
         
         return True 
         
