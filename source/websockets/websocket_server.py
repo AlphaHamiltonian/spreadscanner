@@ -284,7 +284,7 @@ class TradingSignalServer:
                     await self.broadcast_signal(message['data'])
                 elif message['type'] == 'alert':
                     await self.send_alert(message['data'])
-                await asyncio.sleep(0.2)  # 100ms delay                   
+                await asyncio.sleep(1)  # 1ms delay                   
             except asyncio.TimeoutError:
                 continue
             except Exception as e:

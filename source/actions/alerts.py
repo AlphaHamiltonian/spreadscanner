@@ -57,7 +57,7 @@ class AlertManager:
                         custom_params_SoF = {
                             'bid_qty': '0',
                             'ask_qty': ask_qty,
-                            'offset_bid': -offset,
+                            'offset_bid': '-100b',
                             'offset_ask': offset
                         }
                         if send_trade(source2, source2, exchange2, exchange2, spread_pct,custom_params_SoF,'MM'):
