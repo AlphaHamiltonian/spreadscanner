@@ -51,7 +51,7 @@ class AlertManager:
                 if exchange1 == exchange2 and exchange1 == "binance":
                     # Check 24-hour cooldown for trades (86400 seconds = 24 hours)
                     if current_time - last_trade_time > 86400:
-                        ask_qty = round(100/max(bid1,ask1,bid2,ask2))
+                        ask_qty = round(10000/max(bid1,ask1,bid2,ask2))
                         offset= max(bid1,ask1,bid2,ask2)*2
                         #SPOT on FUTURE
                         custom_params_SoF = {
