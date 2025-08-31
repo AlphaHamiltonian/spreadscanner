@@ -13,6 +13,7 @@ import logging
 from source.exchanges.binance import BinanceConnector
 from source.exchanges.bybit import BybitConnector
 from source.exchanges.okx import OkxConnector
+from source.exchanges.hyperliquid import HyperliquidConnector
 
 logger = logging.getLogger(__name__) # module-specific logger
 
@@ -106,6 +107,7 @@ class ExchangeMonitorApp:
         self.binance = BinanceConnector(self)
         self.bybit = BybitConnector(self)
         self.okx = OkxConnector(self)
+        self.hyperliquid = HyperliquidConnector(self)
         
         # Initialize thread pools
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=15)
@@ -134,7 +136,7 @@ class ExchangeMonitorApp:
         exchange_combo = ttk.Combobox(
             control_frame,
             textvariable=self.exchange_var,
-            values=["all", "binance", "bybit", "okx"],
+            values=["all", "binance", "bybit", "okx", "hyperliquid"],
             width=10,
             state="readonly"
         )
@@ -211,6 +213,7 @@ class ExchangeMonitorApp:
             'Spread vs Binance': 'spread_vs_binance',
             'Spread vs OKX': 'spread_vs_okx',
             'Spread vs Bybit': 'spread_vs_bybit',
+            'Spread vs Hyperliquid': 'spread_vs_hyperliquid',
             '24h Change': 'change_24h'
         }
         
@@ -270,7 +273,7 @@ class ExchangeMonitorApp:
         try:
             # Get all symbols from all exchanges
             all_symbols = {}
-            for exchange in ['binance', 'bybit', 'okx']:
+            for exchange in ['binance', 'bybit', 'okx', 'hyperliquid']:
                 symbols = data_store.get_symbols(exchange)
                 all_symbols[exchange] = set(symbols)
                 
@@ -306,6 +309,7 @@ class ExchangeMonitorApp:
                         'Spread vs Binance': item['spread_vs_binance'],
                         'Spread vs OKX': item['spread_vs_okx'],
                         'Spread vs Bybit': item['spread_vs_bybit'],
+                        'Spread vs Hyperliquid': item.get('spread_vs_hyperliquid', 'N/A'),
                         'Future Tick Size': item['future_tick_size'],
                         'Spot Tick Size': item['spot_tick_size'],
                         '24h Change': item['change_24h']
@@ -343,7 +347,7 @@ class ExchangeMonitorApp:
         # Configure columns
         table['columns'] = (
             'symbol', 'exchange', 'bid', 'ask', 'funding_rate', 'spread_vs_spot', 'spread_vs_binance',
-            'spread_vs_okx', 'spread_vs_bybit', 'future_tick_size', 'spot_tick_size', 'change_24h'
+            'spread_vs_okx', 'spread_vs_bybit', 'spread_vs_hyperliquid', 'future_tick_size', 'spot_tick_size', 'change_24h'
         )
         
         # Format columns
@@ -357,6 +361,7 @@ class ExchangeMonitorApp:
         table.column('spread_vs_binance', width=120, anchor=tk.E)
         table.column('spread_vs_okx', width=120, anchor=tk.E)
         table.column('spread_vs_bybit', width=120, anchor=tk.E)
+        table.column('spread_vs_hyperliquid', width=120, anchor=tk.E)
         table.column('future_tick_size', width=100, anchor=tk.E)
         table.column('spot_tick_size', width=100, anchor=tk.E)
         table.column('change_24h', width=100, anchor=tk.E)
@@ -372,6 +377,7 @@ class ExchangeMonitorApp:
         table.heading('spread_vs_binance', text='Spread vs Binance', anchor=tk.W)
         table.heading('spread_vs_okx', text='Spread vs OKX', anchor=tk.W)
         table.heading('spread_vs_bybit', text='Spread vs Bybit', anchor=tk.W)
+        table.heading('spread_vs_hyperliquid', text='Spread vs Hyperliquid', anchor=tk.W)
         table.heading('future_tick_size', text='Future Tick', anchor=tk.W)
         table.heading('spot_tick_size', text='Spot Tick', anchor=tk.W)
         table.heading('change_24h', text='24h Change%', anchor=tk.W)
@@ -437,6 +443,7 @@ class ExchangeMonitorApp:
             'spread_vs_binance': 'Spread vs Binance',
             'spread_vs_okx': 'Spread vs OKX',
             'spread_vs_bybit': 'Spread vs Bybit',
+            'spread_vs_hyperliquid': 'Spread vs Hyperliquid',
             'change_24h': '24h Change'
         }
         
@@ -528,7 +535,7 @@ class ExchangeMonitorApp:
             
         # Filter by selected exchange
         selected_exchange = self.exchange_var.get()
-        exchanges_to_show = ['binance', 'bybit', 'okx'] if selected_exchange == 'all' else [selected_exchange]
+        exchanges_to_show = ['binance', 'bybit', 'okx', 'hyperliquid'] if selected_exchange == 'all' else [selected_exchange]
         
         # Apply symbol filter
         symbol_filter = self.filter_var.get().upper() if apply_filter else ""
@@ -600,10 +607,10 @@ class ExchangeMonitorApp:
                     spread_vs_spot = f"{spread_vs_spot_raw:.6f}%" if isinstance(spread_vs_spot_raw, float) else 'N/A'
                     
                     # Get spreads vs other exchanges
-                    spreads = {'binance': 'N/A', 'bybit': 'N/A', 'okx': 'N/A'}
-                    spreads_raw = {'binance': float('nan'), 'bybit': float('nan'), 'okx': float('nan')}
+                    spreads = {'binance': 'N/A', 'bybit': 'N/A', 'okx': 'N/A', 'hyperliquid': 'N/A'}
+                    spreads_raw = {'binance': float('nan'), 'bybit': float('nan'), 'okx': float('nan'), 'hyperliquid': float('nan')}
                     
-                    for other_exchange in ['binance', 'bybit', 'okx']:
+                    for other_exchange in ['binance', 'bybit', 'okx', 'hyperliquid']:
                         if other_exchange == exchange:
                             continue
                             
@@ -634,6 +641,7 @@ class ExchangeMonitorApp:
                         'spread_vs_binance': spreads['binance'],
                         'spread_vs_okx': spreads['okx'],
                         'spread_vs_bybit': spreads['bybit'],
+                        'spread_vs_hyperliquid': spreads['hyperliquid'],
                         'future_tick_size': future_tick_size if future_tick_size != 'N/A' else 'N/A',
                         'spot_tick_size': spot_tick_size if spot_tick_size != 'N/A' else 'N/A',
                         'change_24h': change_24h,
@@ -643,6 +651,7 @@ class ExchangeMonitorApp:
                         'sort_spread_vs_binance': spreads_raw['binance'],
                         'sort_spread_vs_okx': spreads_raw['okx'],
                         'sort_spread_vs_bybit': spreads_raw['bybit'],
+                        'sort_spread_vs_hyperliquid': spreads_raw['hyperliquid'],
                         'sort_change_24h': self.extract_number(change_24h)
                     })
                     
@@ -655,6 +664,7 @@ class ExchangeMonitorApp:
             'Spread vs Binance': 'sort_spread_vs_binance',
             'Spread vs OKX': 'sort_spread_vs_okx',
             'Spread vs Bybit': 'sort_spread_vs_bybit',
+            'Spread vs Hyperliquid': 'sort_spread_vs_hyperliquid',
             '24h Change': 'sort_change_24h'
         }
         
@@ -707,7 +717,7 @@ class ExchangeMonitorApp:
         def background_worker():
             try:
                 all_symbols = {}
-                for exchange in ['binance', 'bybit', 'okx']:
+                for exchange in ['binance', 'bybit', 'okx', 'hyperliquid']:
                     symbols = data_store.get_symbols(exchange)
                     all_symbols[exchange] = set(symbols)
                     
@@ -780,6 +790,7 @@ class ExchangeMonitorApp:
                         item_data['spread_vs_binance'],
                         item_data['spread_vs_okx'],
                         item_data['spread_vs_bybit'],
+                        item_data['spread_vs_hyperliquid'],
                         item_data['future_tick_size'],
                         item_data['spot_tick_size'],
                         item_data['change_24h']
@@ -844,6 +855,7 @@ class ExchangeMonitorApp:
                         item_data['spread_vs_binance'],
                         item_data['spread_vs_okx'],
                         item_data['spread_vs_bybit'],
+                        item_data['spread_vs_hyperliquid'],
                         item_data['future_tick_size'],
                         item_data['spot_tick_size'],
                         item_data['change_24h']
@@ -941,6 +953,14 @@ class ExchangeMonitorApp:
                     connector.connect_spot_websocket()
                     active_threads[f"{exchange_name}_funding"] = self.executor.submit(connector.update_funding_rates)
                     active_threads[f"{exchange_name}_changes"] = self.executor.submit(connector.update_24h_changes)
+                elif exchange_name == "hyperliquid":
+                    connector.fetch_symbols()
+                    connector.fetch_spot_symbols()
+                    connector.connect_futures_websocket()
+                    connector.connect_spot_websocket()
+                    active_threads[f"{exchange_name}_funding"] = self.executor.submit(connector.update_funding_rates)
+                    active_threads[f"{exchange_name}_changes"] = self.executor.submit(connector.update_24h_changes)
+                    threading.Timer(30, connector.check_symbol_freshness).start()
                 
                 logger.info(f"Completed initializing {exchange_name} connector")
             except Exception as e:
@@ -970,6 +990,14 @@ class ExchangeMonitorApp:
                 daemon=True,
                 name="okx_init_thread"
             ).start()
+            
+        if selected_exchange == "all" or selected_exchange == "hyperliquid":
+            threading.Thread(
+                target=initialize_exchange,
+                args=("hyperliquid", self.hyperliquid),
+                daemon=True,
+                name="hyperliquid_init_thread"
+            ).start()
 
     def start_health_monitor(self):
         """Start a thread to monitor the health of connections"""
@@ -977,7 +1005,7 @@ class ExchangeMonitorApp:
             while not stop_event.is_set():
                 try:
                     # Check all WebSocket connections
-                    for exchange in [self.binance, self.bybit, self.okx]:
+                    for exchange in [self.binance, self.bybit, self.okx, self.hyperliquid]:
                         for name, manager in exchange.websocket_managers.items():
                             if hasattr(manager, 'check_health'):
                                 manager.check_health()
@@ -987,7 +1015,7 @@ class ExchangeMonitorApp:
                         exchange_stats = {}
                         current_time = time.time()
                         
-                        for exchange in ['binance', 'bybit', 'okx']:
+                        for exchange in ['binance', 'bybit', 'okx', 'hyperliquid']:
                             fresh_count = 0
                             stale_count = 0
                             

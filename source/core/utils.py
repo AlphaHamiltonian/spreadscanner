@@ -444,29 +444,31 @@ class DataStore:
         self.exchange_rw_locks = {
             'binance': ReaderWriterLock(),
             'bybit': ReaderWriterLock(),
-            'okx': ReaderWriterLock()
+            'okx': ReaderWriterLock(),
+            'hyperliquid': ReaderWriterLock()
         }
         
         # Keep old exchange_locks for any legacy code that might still use them
         self.exchange_locks = {
             'binance': threading.RLock(),
             'bybit': threading.RLock(),
-            'okx': threading.RLock()
+            'okx': threading.RLock(),
+            'hyperliquid': threading.RLock()
         }
         
-        self.symbols = {'binance': set(), 'bybit': set(), 'okx': set()}
-        self.price_data = {'binance': {}, 'bybit': {}, 'okx': {}}
-        self.funding_rates = {'binance': {}, 'bybit': {}, 'okx': {}}
-        self.tick_sizes = {'binance': {}, 'bybit': {}, 'okx': {}}
-        self.daily_changes = {'binance': {}, 'bybit': {}, 'okx': {}}
-        self.update_counters = {'binance': 0, 'bybit': 0, 'okx': 0}
+        self.symbols = {'binance': set(), 'bybit': set(), 'okx': set(), 'hyperliquid': set()}
+        self.price_data = {'binance': {}, 'bybit': {}, 'okx': {}, 'hyperliquid': {}}
+        self.funding_rates = {'binance': {}, 'bybit': {}, 'okx': {}, 'hyperliquid': {}}
+        self.tick_sizes = {'binance': {}, 'bybit': {}, 'okx': {}, 'hyperliquid': {}}
+        self.daily_changes = {'binance': {}, 'bybit': {}, 'okx': {}, 'hyperliquid': {}}
+        self.update_counters = {'binance': 0, 'bybit': 0, 'okx': 0, 'hyperliquid': 0}
         
         # Symbol mapping and caching
-        self.symbol_maps = {'binance': {}, 'bybit': {}, 'okx': {}}
+        self.symbol_maps = {'binance': {}, 'bybit': {}, 'okx': {}, 'hyperliquid': {}}
         self.normalized_cache = {}
         self.equivalent_symbols = {}
         # Add spreads data structure
-        self.spreads = {'binance': {}, 'bybit': {}, 'okx': {}}
+        self.spreads = {'binance': {}, 'bybit': {}, 'okx': {}, 'hyperliquid': {}}
         self.spread_timestamp = 0
         self.spread_calculator = SpreadCalculator(self)
     def update_symbol_maps(self):

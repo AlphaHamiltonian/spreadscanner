@@ -7,6 +7,7 @@ from source.core.utils import data_store
 from source.exchanges.binance import BinanceConnector
 from source.exchanges.bybit import BybitConnector
 from source.exchanges.okx import OkxConnector
+from source.exchanges.hyperliquid import HyperliquidConnector
 import source.core.config as config
 # Add with the other imports in headless.py
 from source.scanners.price_movement_detector import initialize_detector, movement_detector
@@ -23,6 +24,7 @@ class HeadlessMonitor:
         self.binance = BinanceConnector(self)
         self.bybit = BybitConnector(self)
         self.okx = OkxConnector(self)
+        self.hyperliquid = HyperliquidConnector(self)
         
         # Initialize thread pool
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=15)
@@ -65,6 +67,14 @@ class HeadlessMonitor:
                     connector.connect_spot_websocket()
                     active_threads[f"{exchange_name}_funding"] = self.executor.submit(connector.update_funding_rates)
                     active_threads[f"{exchange_name}_changes"] = self.executor.submit(connector.update_24h_changes)
+                elif exchange_name == "hyperliquid":
+                    connector.fetch_symbols()
+                    connector.fetch_spot_symbols()
+                    connector.connect_futures_websocket()
+                    connector.connect_spot_websocket()
+                    active_threads[f"{exchange_name}_funding"] = self.executor.submit(connector.update_funding_rates)
+                    active_threads[f"{exchange_name}_changes"] = self.executor.submit(connector.update_24h_changes)
+                    threading.Timer(30, connector.check_symbol_freshness).start()
                 
                 logger.info(f"Completed initializing {exchange_name} connector")
             except Exception as e:
@@ -94,6 +104,14 @@ class HeadlessMonitor:
                 daemon=True,
                 name="okx_init_thread"
             ).start()
+            
+        if exchange_name == "all" or exchange_name == "hyperliquid":
+            threading.Thread(
+                target=initialize_exchange,
+                args=("hyperliquid", self.hyperliquid),
+                daemon=True,
+                name="hyperliquid_init_thread"
+            ).start()
 
     def start_health_monitor(self):
         """Start a thread to monitor the health of connections"""
@@ -101,7 +119,7 @@ class HeadlessMonitor:
             while not stop_event.is_set():
                 try:
                     # Check all WebSocket connections
-                    for exchange in [self.binance, self.bybit, self.okx]:
+                    for exchange in [self.binance, self.bybit, self.okx, self.hyperliquid]:
                         for name, manager in exchange.websocket_managers.items():
                             if hasattr(manager, 'check_health'):
                                 manager.check_health()
@@ -110,7 +128,7 @@ class HeadlessMonitor:
                     exchange_stats = {}
                     current_time = time.time()
                     
-                    for exchange in ['binance', 'bybit', 'okx']:
+                    for exchange in ['binance', 'bybit', 'okx', 'hyperliquid']:
                         fresh_count = 0
                         stale_count = 0
                         
@@ -125,8 +143,9 @@ class HeadlessMonitor:
                                         
                         exchange_stats[exchange] = f"{fresh_count} fresh, {stale_count} stale"
                         
-                    logger.info(f"Data freshness: Binance: {exchange_stats['binance']}, "
-                            f"Bybit: {exchange_stats['bybit']}, OKX: {exchange_stats['okx']}")
+                    logger.info(f"Data freshness: Binance: {exchange_stats.get('binance', 'N/A')}, "
+                            f"Bybit: {exchange_stats.get('bybit', 'N/A')}, OKX: {exchange_stats.get('okx', 'N/A')}, "
+                            f"Hyperliquid: {exchange_stats.get('hyperliquid', 'N/A')}")
                 except Exception as e:
                     logger.error(f"Error in health monitor: {e}")
                     

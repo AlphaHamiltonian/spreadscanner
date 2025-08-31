@@ -51,7 +51,7 @@ class SpreadCalculator:
             required_symbols[exchange].add(f"{symbol}_SPOT")
             
             # Add equivalent symbols from other exchanges
-            for other in ['binance', 'bybit', 'okx']:
+            for other in ['binance', 'bybit', 'okx', 'hyperliquid']:
                 if other != exchange:
                     equiv = symbol_matcher.find_equivalent_symbol(exchange, symbol, other)
                     if equiv:
@@ -108,8 +108,8 @@ class SpreadCalculator:
             )
 
             # vs other exchanges
-            vs_binance = vs_bybit = vs_okx = 'N/A'
-            for other in ("binance", "bybit", "okx"):
+            vs_binance = vs_bybit = vs_okx = vs_hyperliquid = 'N/A'
+            for other in ("binance", "bybit", "okx", "hyperliquid"):
                 if other == exchange:
                     continue
                 
@@ -134,6 +134,7 @@ class SpreadCalculator:
                     if   other == "binance": vs_binance = spread
                     elif other == "bybit":   vs_bybit   = spread
                     elif other == "okx":     vs_okx     = spread
+                    elif other == "hyperliquid": vs_hyperliquid = spread
 
             # Store results for this symbol
             spreads_for_exch[dirty_symbol] = {
@@ -141,6 +142,7 @@ class SpreadCalculator:
                 "vs_binance": vs_binance,
                 "vs_bybit":   vs_bybit,
                 "vs_okx":     vs_okx,
+                "vs_hyperliquid": vs_hyperliquid,
                 "timestamp":  current_time,
             }
 
