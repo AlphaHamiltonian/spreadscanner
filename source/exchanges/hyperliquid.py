@@ -159,12 +159,8 @@ class HyperliquidConnector(BaseExchangeConnector):
                             symbol = f"{coin_name}USDT"
                             data_store.symbols['hyperliquid'].add(symbol)
                             
-                            # Store tick size information
-                            if 'szDecimals' in asset:
-                                if symbol not in data_store.tick_sizes['hyperliquid']:
-                                    data_store.tick_sizes['hyperliquid'][symbol] = {}
-                                tick_size = 10 ** (-asset['szDecimals'])
-                                data_store.tick_sizes['hyperliquid'][symbol]['future_tick_size'] = tick_size
+                            # Don't store tick size - szDecimals is for position sizing, not price ticks
+                            # Hyperliquid tick sizes will show as N/A
                                 
                 logger.info(f"Fetched {len(data_store.symbols['hyperliquid'])} Hyperliquid futures symbols")
                 data_store.update_symbol_maps()
@@ -202,12 +198,8 @@ class HyperliquidConnector(BaseExchangeConnector):
                                 spot_to_perp_map[pair_name] = tracking_symbol
                                 spot_count += 1
                                 
-                                # Store tick size if available
-                                if 'szDecimals' in asset:
-                                    if tracking_symbol not in data_store.tick_sizes['hyperliquid']:
-                                        data_store.tick_sizes['hyperliquid'][tracking_symbol] = {}
-                                    tick_size = 10 ** (-asset['szDecimals'])
-                                    data_store.tick_sizes['hyperliquid'][tracking_symbol]['spot_tick_size'] = tick_size
+                                # Don't store tick size - szDecimals is for position sizing, not price ticks
+                                # Hyperliquid tick sizes will show as N/A
                             
                 data_store.hyperliquid_spot_to_future_map = spot_to_perp_map
                 logger.info(f"Found {spot_count} Hyperliquid spot markets (tokens like PURR, etc.)")
