@@ -821,6 +821,7 @@ class ExchangeMonitorApp:
                     item_data['spread_vs_binance'],
                     item_data['spread_vs_okx'],
                     item_data['spread_vs_bybit'],
+                    item_data['spread_vs_hyperliquid'],
                     item_data['future_tick_size'],
                     item_data['spot_tick_size'],
                     item_data['change_24h']
