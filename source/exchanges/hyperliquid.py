@@ -172,7 +172,7 @@ class HyperliquidConnector(BaseExchangeConnector):
             logger.error(f"Error fetching Hyperliquid symbols: {e}")
 
     def fetch_spot_symbols(self):
-        """Fetch spot market information for corresponding futures"""
+        """Fetch spot market information - Hyperliquid has independent spot markets for different tokens"""
         try:
             response = self.session.post(
                 f"{self.rest_url}/info",
@@ -180,25 +180,40 @@ class HyperliquidConnector(BaseExchangeConnector):
             )
             if response.status_code == 200:
                 data = response.json()
-                futures_symbols = data_store.get_symbols('hyperliquid')
+                
+                spot_to_perp_map = {}
+                spot_count = 0
                 
                 with WriteLock(data_store.exchange_rw_locks['hyperliquid']):
                     if 'universe' in data:
-                        for asset in data['universe']:
-                            # Spot pairs come as "BTC/USDC" format
+                        for asset in data['universe'][:50]:  # Limit to first 50 spot markets
                             pair_name = asset['name']
+                            
+                            # Only process pairs with '/' (actual trading pairs)
                             if '/' in pair_name:
                                 base, quote = pair_name.split('/')
-                                # Find corresponding futures symbol
-                                future_symbol = f"{base}USDT"
+                                base_upper = base.upper()
                                 
-                                if future_symbol in futures_symbols:
-                                    # Store spot tick size for this corresponding future
-                                    if 'szDecimals' in asset:
-                                        if future_symbol not in data_store.tick_sizes['hyperliquid']:
-                                            data_store.tick_sizes['hyperliquid'][future_symbol] = {}
-                                        tick_size = 10 ** (-asset['szDecimals'])
-                                        data_store.tick_sizes['hyperliquid'][future_symbol]['spot_tick_size'] = tick_size
+                                # Create a standardized symbol for tracking
+                                # Note: These are different tokens, not the same as perps
+                                tracking_symbol = f"{base_upper}USDT"
+                                
+                                # Add to spot mapping
+                                spot_to_perp_map[pair_name] = tracking_symbol
+                                spot_count += 1
+                                
+                                # Store tick size if available
+                                if 'szDecimals' in asset:
+                                    if tracking_symbol not in data_store.tick_sizes['hyperliquid']:
+                                        data_store.tick_sizes['hyperliquid'][tracking_symbol] = {}
+                                    tick_size = 10 ** (-asset['szDecimals'])
+                                    data_store.tick_sizes['hyperliquid'][tracking_symbol]['spot_tick_size'] = tick_size
+                            
+                data_store.hyperliquid_spot_to_future_map = spot_to_perp_map
+                logger.info(f"Found {spot_count} Hyperliquid spot markets (tokens like PURR, etc.)")
+                
+                # Note: Most of these won't have corresponding perpetuals
+                logger.info("Note: Hyperliquid spot markets are for different tokens than perpetuals")
         except Exception as e:
             logger.error(f"Error fetching Hyperliquid spot symbols: {e}")
 
@@ -289,43 +304,55 @@ class HyperliquidConnector(BaseExchangeConnector):
         )
 
     def connect_spot_websocket(self):
-        """Connect to Hyperliquid spot WebSocket"""
-        # Get futures symbols to create spot subscriptions
-        futures_symbols = list(data_store.get_symbols('hyperliquid'))
+        """Connect to Hyperliquid spot WebSocket - Note: Hyperliquid spot is for different tokens"""
+        # Get the actual spot pairs from the mapping
+        if not hasattr(data_store, 'hyperliquid_spot_to_future_map'):
+            logger.info("No Hyperliquid spot markets found - this is normal for Hyperliquid")
+            return
+            
+        spot_pairs = data_store.hyperliquid_spot_to_future_map
+        if not spot_pairs:
+            logger.info("No Hyperliquid spot pairs available")
+            return
         
-        # Create spot pairs list
-        spot_pairs = []
-        for symbol in futures_symbols:
-            base = symbol.replace('USDT', '')
-            spot_pair = f"{base}/USDC"
-            spot_pairs.append((base, symbol))
-        
-        logger.info(f"Preparing spot WebSocket for {len(spot_pairs)} pairs")
+        logger.info(f"Preparing spot WebSocket for {len(spot_pairs)} Hyperliquid-specific tokens")
         
         def on_message(ws, message):
             try:
                 data = json.loads(message)
                 
-                # Handle spot price updates
-                if 'channel' in data and 'spotClearingHouse' in data['channel']:
-                    if 'data' in data:
-                        spot_data = data['data']
-                        # Process spot prices
-                        for coin_data in spot_data:
-                            if 'coin' in coin_data and 'price' in coin_data:
-                                coin = coin_data['coin']
-                                price = float(coin_data['price'])
-                                symbol = f"{coin}USDT"
-                                spot_key = f"{symbol}_SPOT"
+                # Handle L2 book updates for spot pairs
+                if 'channel' in data and 'l2Book' in data['channel']:
+                    # Parse the channel to get the coin
+                    parts = data['channel'].split(':')
+                    if len(parts) >= 2:
+                        coin = parts[1]
+                        
+                        # Check if this is a spot pair we're tracking
+                        for spot_pair, perp_symbol in spot_pairs.items():
+                            if coin.upper() in spot_pair.upper():
+                                spot_key = f"{perp_symbol}_SPOT"
                                 
-                                # Use price with small spread for bid/ask
-                                spread = price * 0.0001
-                                bid = price - spread
-                                ask = price + spread
-                                
-                                data_store.update_price_direct(
-                                    'hyperliquid', spot_key, bid, ask, last=price
-                                )
+                                if 'data' in data:
+                                    book_data = data['data']
+                                    if 'levels' in book_data:
+                                        levels = book_data['levels']
+                                        # Get best bid and ask
+                                        if len(levels) >= 2 and levels[0] and levels[1]:
+                                            bids = levels[0]  # [[price, size, count], ...]
+                                            asks = levels[1]
+                                            
+                                            if bids and asks:
+                                                best_bid = float(bids[0][0]) if bids[0] else 0
+                                                best_ask = float(asks[0][0]) if asks[0] else 0
+                                                
+                                                if best_bid > 0 and best_ask > 0:
+                                                    last = (best_bid + best_ask) / 2
+                                                    data_store.update_price_direct(
+                                                        'hyperliquid', spot_key, best_bid, best_ask, last=last
+                                                    )
+                                                    logger.debug(f"Updated Hyperliquid spot: {spot_key} bid={best_bid:.4f} ask={best_ask:.4f}")
+                                break
                                 
             except Exception as e:
                 logger.error(f"Error processing Hyperliquid spot message: {e}")
@@ -333,12 +360,30 @@ class HyperliquidConnector(BaseExchangeConnector):
         def on_open(ws):
             logger.info(f"Hyperliquid spot WebSocket connected")
             
-            # Subscribe to spot meta for all spot pairs
-            subscribe_msg = json.dumps({
-                "method": "subscribe",
-                "subscription": {"type": "spotMeta"}
-            })
-            ws.send(subscribe_msg)
+            # Subscribe to spot orderbook data for each pair
+            for base, future_symbol in spot_pairs[:20]:  # Limit to first 20 to avoid rate limits
+                # Subscribe to spot L2 book for this coin
+                subscribe_msg = json.dumps({
+                    "method": "subscribe",
+                    "subscription": {
+                        "type": "spotClearinghouseState",
+                        "user": "0x0000000000000000000000000000000000000000"  # Public data
+                    }
+                })
+                ws.send(subscribe_msg)
+                break  # Only need one subscription for all spot data
+                
+            # Also try subscribing to spot orderbooks individually
+            for base, future_symbol in spot_pairs[:10]:  # Limit subscriptions
+                subscribe_msg = json.dumps({
+                    "method": "subscribe", 
+                    "subscription": {
+                        "type": "l2Book",
+                        "coin": f"{base}:USDC"  # Spot format might be BTC:USDC
+                    }
+                })
+                ws.send(subscribe_msg)
+                time.sleep(0.1)  # Small delay between subscriptions
             
         # Create WebSocket for spot
         manager = self.create_better_hyperliquid_websocket(
