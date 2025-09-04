@@ -57,11 +57,15 @@ spreadscanner/
 $ git clone git@github.com:AlphaHamiltonian/spreadscanner.git
 $ cd spreadscanner
 
-# 2. Install dependencies (preferably in a virtual environment)
-$ python -m venv .venv && source .venv/bin/activate
+# 2. Create and activate a virtual environment
+$ python3 -m venv venv
+$ source venv/bin/activate  # On Linux/Mac
+# For Windows: venv\Scripts\activate
+
+# 3. Install dependencies
 $ pip install -r requirements.txt
 
-# 3. Run the desktop app
+# 4. Run the desktop app
 $ python run.py
 ```
 

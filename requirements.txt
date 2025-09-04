@@ -1,10 +1,11 @@
 # Core networking dependencies
 requests>=2.25.1
-websocket-client>=1.2.3
-websockets>=15.0.1
+websocket-client>=1.2.3  # For synchronous WebSocket connections
+websockets>=10.0  # For async WebSocket server
+
 # Performance-optimized JSON parsing
-orjson>=3.8.0  # Used in your code instead of ujson
-plyer>=2.1.0
+orjson>=3.8.0  # Fast JSON serialization/deserialization
+
 # GUI dependencies
 # Note: tkinter comes with Python installation
 # but on Linux may need to be installed separately with:
@@ -13,8 +14,5 @@ plyer>=2.1.0
 
 # Development and build tools (optional)
 # Only needed if compiling with Nuitka
-nuitka>=1.0.0  # For compiling to binary
-ordered-set>=4.1.0  # Required by Nuitka
-
-# Optional enhancements
-python-dateutil>=2.8.2  # For better date handling if needed
+# nuitka>=1.0.0  # For compiling to binary
+# ordered-set>=4.1.0  # Required by Nuitka
