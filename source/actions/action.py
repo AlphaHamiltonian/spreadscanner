@@ -8,8 +8,8 @@ from source.websockets.websocket_server import trading_signal_server
 # Configuration – kept identical to your existing variable names
 # --------------------------------------------------------------------------- #
 
-TELEGRAM_BOT_TOKEN = "REDACTED_TOKEN"  # Replace with your bot token
-TELEGRAM_CHAT_ID = "REDACTED_CHAT_ID"  # Replace with your group chat ID
+TELEGRAM_BOT_TOKEN = None  # Set via environment variable or config file
+TELEGRAM_CHAT_ID = None  # Set via environment variable or config file
 
 # New configuration for broadcast method
 BROADCAST_METHOD = "websocket"  # Options: "telegram", "websocket", "both"
